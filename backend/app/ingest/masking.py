@@ -11,6 +11,21 @@ replaces free-standing numbers, so "timeout after 5012ms" and "timeout after
 
 import re
 
+# US phone numbers. Area codes never start with 0 or 1. Groups separated only
+# by spaces are also left alone inside a longer run of numbers, so
+# "sizes 128 256 512 1024" survives while "555 123 4567" is masked.
+_PHONE = re.compile(
+    r"""
+    (?:\+1[-.\ ]?|\b1[-.])?                     # optional country code
+    (?:\([2-9]\d{2}\)\s?|\b[2-9]\d{2}[-.])      # (555) 123-4567, 555-123-4567, 555.123.4567
+    \d{3}[-.\ ]\d{4}\b
+    |
+    (?<![\d.]\ )(?:\+1[-.\ ]?)?                 # not preceded by another number
+    \b[2-9]\d{2}\ \d{3}\ \d{4}\b(?!\ \d)        # 555 123 4567, not followed by one
+    """,
+    re.VERBOSE,
+)
+
 # Order matters: SSNs (3-2-4 digits) must be replaced before the phone pattern
 # gets a chance to match part of them, and quoted names before bare ones.
 _PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
@@ -21,13 +36,10 @@ _PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"\bM\d{7}\b"), "<MEMBER_ID>"),
     (re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+"), "<EMAIL>"),
     (re.compile(r"\b\d{3}-\d{2}-\d{4}\b"), "<SSN>"),
-    (
-        re.compile(r"(?:\+1[-. ]?|\b1[-.])?(?:\(\d{3}\)\s?|\b\d{3}[-. ])\d{3}[-. ]\d{4}\b"),
-        "<PHONE>",
-    ),
+    (_PHONE, "<PHONE>"),
     # Unformatted numbers are only treated as phones with a +1 prefix or a
     # phone key; a bare run of ten digits is as likely to be a claim number.
-    (re.compile(r"\+1\d{10}\b"), "<PHONE>"),
+    (re.compile(r"\+1[2-9]\d{9}\b"), "<PHONE>"),
     (re.compile(r"\b(phone|mobile)=\d{10}\b"), r"\1=<PHONE>"),
 )
 
