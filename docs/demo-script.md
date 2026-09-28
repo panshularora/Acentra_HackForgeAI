@@ -25,8 +25,9 @@ Open a spare terminal for the incident commands and another running
 `make sns-tail` (shows alerts as SNS delivers them). With Docker, prefix the
 incident commands with `docker compose exec loggen` (see the README).
 
-Check: the dashboard's status dot is green, the chart shows a flat line inside
-the shaded band, and the alert feed is empty.
+Check: the header says "Live" and "Monitoring", the status hero says "All
+clear", the chart shows a flat line inside the shaded band, and the incident
+feed is empty.
 
 ## 1. The problem (0:00 - 0:20)
 
@@ -49,16 +50,15 @@ While it runs:
 
 > "Claim adjudication just lost its database. Watch the error-rate line."
 
-Within 10 to 20 seconds the line leaves the band and an alert slides in,
-at WARNING or HIGH, escalating to CRITICAL within about 30 seconds as the
-outage fills the window.
+Within about 10 seconds (one bucket) the line leaves the band and a CRITICAL
+incident opens. The status hero switches to its summary.
 
 Point at the card:
 
 > "One alert, not one every ten seconds. The summary says what broke and
 > where: most errors come from claim-adjudication, and the message is 'DB
-> connection timeout'. It was opened within two buckets of the outage
-> starting. The score is a modified z-score: how many robust standard
+> connection timeout'. It opened within one ten-second bucket of the
+> outage starting. The score is a modified z-score: how many robust standard
 > deviations above normal we are."
 
 Point at the timestamps (opened_at versus when you ran the command).
@@ -72,15 +72,14 @@ make incident-auth      # one IP hammers member-auth with stolen passwords
 > "Different failure: someone is trying stolen passwords against member
 > login."
 
-An alert naming the source IP appears within about 10 seconds and reaches
-CRITICAL within about 20:
+A CRITICAL incident naming the source IP opens within about 10 seconds:
 
 > "It names the attacker: '… failed logins from 10.4.2.17 in the last 60
 > seconds'. The security team can block that IP straight from the alert."
 
 ## 4. Trust (2:05 - 2:35)
 
-Expand a sample log line on the alert card.
+Open "Why it fired" on the incident card and point at the masked log line.
 
 > "Every line is masked before it is stored or sent anywhere. Member IDs,
 > names, e-mails, SSNs and phone numbers become tags like `<MEMBER_ID>`.
@@ -92,8 +91,8 @@ Switch to the `make sns-tail` terminal.
 > "Each alert is published to Amazon SNS and CloudWatch Logs. This terminal
 > is a subscriber reading the alert back; the message id matches the one on
 > the card. This is real boto3 code running against a local AWS emulator
-> because we don't have an AWS account here. Pointing it at real AWS is one
-> environment variable."
+> because we don't have an AWS account here. Pointing it at real AWS is a
+> configuration change, not a code change."
 
 ## 5. Proof (2:35 - 2:55)
 
@@ -103,23 +102,19 @@ make replay
 
 > "We don't just demo it once. The replay test generates twenty minutes of
 > traffic with both incidents at known times and runs it through the same
-> detector. Both incidents are caught within two ten-second buckets, with zero
+> detector. Both incidents are caught within one ten-second bucket, with zero
 > false alarms during the normal traffic. It runs in our test suite."
 
-## Extra faults: quiet failures (optional)
-
-Three more faults need no error spike to matter. Run them the same way, with
-`make loggen` still running (the last two remove lines from its output):
+## Extra fault: a brand-new error (optional)
 
 ```bash
 make incident-new       # a never-seen TLS certificate error to the payer gateway, 0.5/s for 45 s
-make incident-silence   # eligibility-sync stops sending its 5 s heartbeat for 60 s
-make incident-flow      # validated claims stop being adjudicated for 60 s
 ```
 
-> "These are the failures a global error rate cannot see: a new error at low
-> volume, a service that goes quiet, and claims that enter the pipeline but
-> never come out. The last two add no error lines at all."
+> "This error has never appeared before and arrives at low volume, so a
+> global error rate barely moves. Because every log template has its own
+> baseline, a brand-new template is scored at once and opens its own
+> incident."
 
 ## Likely questions
 
