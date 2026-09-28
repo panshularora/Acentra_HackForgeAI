@@ -1,15 +1,16 @@
-"""Explain an incident: which services, messages and source IPs the errors come from.
+"""Explain an incident: which services, messages, source IPs and parameters are behind it.
 
 An alert that only says "error rate is 31%" sends the on-call engineer
 digging through logs. Counting the error lines in the window by service,
-message template and source IP usually answers "what broke and where" at
-once, and :func:`summarise` turns the counts into one readable sentence.
+message template and source IP, and the alerting template's lines by their
+Drain3 parameter values, usually answers "what broke and where" at once, and
+:func:`summarise` turns the counts into one readable sentence.
 """
 
-from collections import Counter
+from collections import Counter, defaultdict
 from collections.abc import Iterable, Sequence
 
-from app.models import Contributor, LogEvent, TopContributors
+from app.models import Contributor, LogEvent, ParamValue, TopContributors
 
 # Background errors come from many client IPs, each with a tiny share, so one
 # address behind this much of all errors is the story (40% lets the summary
@@ -17,6 +18,10 @@ from app.models import Contributor, LogEvent, TopContributors
 # are still in the window).
 DOMINANT_IP_SHARE = 0.4
 AUTH_FAILURE_STATUSES = frozenset({401, 403})
+SOURCE_IP_PARAM = "source_ip"
+# A parameter value is worth showing when it sits behind at least half
+# of the template's lines (request ids and latencies, unique per line, never do).
+PARAM_MIN_SHARE = 0.5
 
 
 def rank(values: Iterable[str], total: int, limit: int) -> list[Contributor]:
@@ -39,19 +44,41 @@ def top_contributors(events: Sequence[LogEvent], limit: int = 3) -> TopContribut
     )
 
 
-def summarise(events: Sequence[LogEvent], window_seconds: int) -> str:
-    """One sentence saying what is failing and where, based on the error events."""
-    if not events:
-        return "Error rate is above its normal range"
+def top_params(events: Sequence[LogEvent], limit: int) -> list[ParamValue]:
+    """The most common value of each template parameter, if it dominates ``events``."""
+    total = len(events)
+    if total == 0:
+        return []
+    values: defaultdict[str, Counter[str]] = defaultdict(Counter)
+    for event in events:
+        for name, value in event.params:
+            values[name][value] += 1
+    candidates = []
+    for name, counts in values.items():
+        value, count = counts.most_common(1)[0]
+        if count >= 2 and count / total >= PARAM_MIN_SHARE:
+            candidates.append(ParamValue(name=name, value=value, count=count, share=count / total))
+    candidates.sort(key=lambda p: (-p.count, p.name))
+    return candidates[:limit]
 
-    ip_summary = _summarise_dominant_ip(events, window_seconds)
+
+def summarise(template_events: Sequence[LogEvent], error_count: int, window_seconds: int) -> str:
+    """One sentence saying what is failing and where, from one template's error lines.
+
+    ``error_count`` is every error in the window, so the sentence can say how
+    much of the trouble this template accounts for.
+    """
+    if not template_events:
+        return "Errors are above their normal range"
+
+    ip_summary = _summarise_dominant_ip(template_events, window_seconds)
     if ip_summary:
         return ip_summary
 
-    service, service_share = _most_common_with_share(e.service for e in events)
-    service_events = [e for e in events if e.service == service]
-    message, _ = _most_common_with_share(e.message for e in service_events)
-    return f"{service_share:.0%} of errors come from {service}: {message}"
+    service, _ = _most_common_with_share(e.service for e in template_events)
+    message, _ = _most_common_with_share(e.message for e in template_events)
+    share = len(template_events) / max(error_count, len(template_events))
+    return f"{share:.0%} of errors come from {service}: {message}"
 
 
 def sample_lines(events: Sequence[LogEvent], limit: int) -> list[str]:
@@ -71,12 +98,13 @@ def sample_lines(events: Sequence[LogEvent], limit: int) -> list[str]:
 
 
 def _summarise_dominant_ip(events: Sequence[LogEvent], window_seconds: int) -> str | None:
-    """Describe the incident by source IP if a single address dominates the errors."""
-    ips = [e.source_ip for e in events if e.source_ip]
-    if not ips:
+    """Describe the incident by source IP if one address, a Drain3 parameter, dominates."""
+    ips = [_param(e, SOURCE_IP_PARAM) for e in events]
+    known = [ip for ip in ips if ip]
+    if not known:
         return None
-    ip, _ = _most_common_with_share(ips)
-    ip_events = [e for e in events if e.source_ip == ip]
+    ip, _ = _most_common_with_share(known)
+    ip_events = [e for e, event_ip in zip(events, ips, strict=True) if event_ip == ip]
     if len(ip_events) / len(events) < DOMINANT_IP_SHARE:
         return None
 
@@ -85,6 +113,10 @@ def _summarise_dominant_ip(events: Sequence[LogEvent], window_seconds: int) -> s
         return f"{auth_failures} failed logins from {ip} in the last {window_seconds}s"
     message, _ = _most_common_with_share(e.message for e in ip_events)
     return f"{len(ip_events)} errors from {ip} in the last {window_seconds}s: {message}"
+
+
+def _param(event: LogEvent, name: str) -> str | None:
+    return next((value for key, value in event.params if key == name), None)
 
 
 def _most_common_with_share(values: Iterable[str]) -> tuple[str, float]:

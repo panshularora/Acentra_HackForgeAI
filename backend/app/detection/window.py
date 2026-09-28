@@ -5,9 +5,13 @@ the bucket is closed and pushed into the window, and the oldest bucket falls
 out. With the defaults (10 s buckets, 60 s window) the error rate is refreshed
 every 10 seconds but always reflects the last full minute, which smooths out
 single-second blips without hiding a real spike for long.
+
+Error lines are also counted per log template, so the same window yields the
+global error rate (for the chart) and one error count per template (for
+alerting).
 """
 
-from collections import deque
+from collections import Counter, deque
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -23,6 +27,7 @@ class Bucket:
     total: int = 0
     errors: int = 0
     error_events: list[LogEvent] = field(default_factory=list)
+    template_errors: Counter[str] = field(default_factory=Counter)
 
 
 class BucketAccumulator:
@@ -45,6 +50,9 @@ class BucketAccumulator:
             total=self._total,
             errors=len(self._error_events),
             error_events=self._error_events,
+            template_errors=Counter(
+                e.template_id for e in self._error_events if e.template_id is not None
+            ),
         )
         self._total = 0
         self._error_events = []
@@ -84,7 +92,17 @@ class SlidingWindow:
         total = self.total
         return self.errors / total if total else 0.0
 
-    def error_events(self) -> Iterator[LogEvent]:
-        """Error events in the window, oldest first."""
+    def template_errors(self) -> Counter[str]:
+        """Error lines in the window per template id."""
+        counts: Counter[str] = Counter()
         for bucket in self._buckets:
-            yield from bucket.error_events
+            counts.update(bucket.template_errors)
+        return counts
+
+    def error_events(self, template_id: str | None = None) -> Iterator[LogEvent]:
+        """Error events in the window, oldest first, optionally only those of one template."""
+        for bucket in self._buckets:
+            if template_id is None:
+                yield from bucket.error_events
+            else:
+                yield from (e for e in bucket.error_events if e.template_id == template_id)

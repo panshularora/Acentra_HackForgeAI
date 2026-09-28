@@ -69,3 +69,17 @@ def test_error_events_are_yielded_oldest_first() -> None:
     window.push(Bucket(end=T0, total=1, errors=1, error_events=[second]))
 
     assert [e.service for e in window.error_events()] == ["a", "b"]
+
+
+def test_window_counts_errors_per_template() -> None:
+    window = SlidingWindow(2)
+    for templates in (["1", "1", "2"], ["1"], ["2"]):
+        acc = BucketAccumulator()
+        for template_id in templates:
+            acc.add(make_event("ERROR", template_id=template_id))
+        acc.add(make_event("INFO", template_id="3"))
+        window.push(acc.close(T0))
+
+    assert window.template_errors() == {"1": 1, "2": 1}
+    assert [e.template_id for e in window.error_events("2")] == ["2"]
+    assert len(list(window.error_events())) == 2

@@ -9,6 +9,10 @@ Detection and delivery update different columns. :meth:`AlertStore.save_detectio
 never touches ``acknowledged``, and only touches ``delivery`` when asked to
 because a new delivery was just queued, so a routine detector update cannot
 undo an operator's acknowledgement or an SNS message id recorded moments ago.
+
+Schema changes are additive: a column added later (``explanation``, the
+detector's reasoning as JSON) is created with ``ALTER TABLE`` on databases
+that predate it, and rows without it load with an empty explanation.
 """
 
 import json
@@ -18,7 +22,16 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from app.models import Alert, Delivery, Severity, StatsPoint, TopContributors, from_iso, to_iso
+from app.models import (
+    Alert,
+    Delivery,
+    Explanation,
+    Severity,
+    StatsPoint,
+    TopContributors,
+    from_iso,
+    to_iso,
+)
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS alerts (
@@ -35,7 +48,8 @@ CREATE TABLE IF NOT EXISTS alerts (
     top_contributors TEXT NOT NULL,
     sample_lines     TEXT NOT NULL,
     acknowledged     INTEGER NOT NULL DEFAULT 0,
-    delivery         TEXT NOT NULL
+    delivery         TEXT NOT NULL,
+    explanation      TEXT
 );
 CREATE INDEX IF NOT EXISTS alerts_opened_at ON alerts (opened_at DESC);
 """
@@ -52,7 +66,11 @@ _DETECTION_COLUMNS = (
     "summary",
     "top_contributors",
     "sample_lines",
+    "explanation",
 )
+
+# Columns added after the first release: name -> SQL type (always nullable).
+_ADDED_COLUMNS = {"explanation": "TEXT"}
 
 
 class AlertStore:
@@ -66,6 +84,7 @@ class AlertStore:
         self._db = sqlite3.connect(str(path), check_same_thread=False)
         self._db.row_factory = sqlite3.Row
         self._db.executescript(_SCHEMA)
+        self._migrate()
 
     def save_detection(self, alert: Alert, *, reset_delivery: bool = False) -> Alert:
         """Insert a new alert or update its detection fields; return the stored version.
@@ -112,6 +131,14 @@ class AlertStore:
         """Close the database connection."""
         self._db.close()
 
+    def _migrate(self) -> None:
+        """Add columns that databases created by older versions are missing."""
+        existing = {row["name"] for row in self._db.execute("PRAGMA table_info(alerts)")}
+        with self._db:
+            for name, sql_type in _ADDED_COLUMNS.items():
+                if name not in existing:
+                    self._db.execute(f"ALTER TABLE alerts ADD COLUMN {name} {sql_type}")
+
     def _update(self, alert_id: str, assignment: str, value: object) -> Alert | None:
         with self._db:
             cursor = self._db.execute(
@@ -154,6 +181,7 @@ def _to_row(alert: Alert) -> dict[str, Any]:
         "sample_lines": json.dumps(alert.sample_lines),
         "acknowledged": int(alert.acknowledged),
         "delivery": json.dumps(alert.delivery.to_dict()),
+        "explanation": json.dumps(alert.explanation.to_dict()),
     }
 
 
@@ -173,4 +201,5 @@ def _from_row(row: sqlite3.Row) -> Alert:
         sample_lines=json.loads(row["sample_lines"]),
         acknowledged=bool(row["acknowledged"]),
         delivery=Delivery.from_dict(json.loads(row["delivery"])),
+        explanation=Explanation.from_dict(json.loads(row["explanation"] or "{}")),
     )

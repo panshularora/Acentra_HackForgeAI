@@ -14,6 +14,8 @@ def make_event(
     source_ip: str | None = None,
     http_status: int | None = None,
     raw: str | None = None,
+    template_id: str | None = None,
+    params: tuple[tuple[str, str], ...] = (),
 ) -> LogEvent:
     """Build a LogEvent with sensible defaults for tests."""
     raw = raw or f'2026-09-28T13:00:00Z {level} {service} msg="{message}"'
@@ -25,6 +27,8 @@ def make_event(
         raw=raw,
         source_ip=source_ip,
         http_status=http_status,
+        template_id=template_id,
+        params=params,
     )
 
 

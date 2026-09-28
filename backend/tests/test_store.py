@@ -1,10 +1,21 @@
+import sqlite3
 from datetime import timedelta
 from pathlib import Path
 
 import pytest
 
-from app.alerts.store import AlertStore, StatsHistory
-from app.models import ChannelDelivery, Delivery, Severity, StatsPoint
+from app.alerts.store import _SCHEMA, AlertStore, StatsHistory
+from app.models import (
+    Alert,
+    BaselineBand,
+    ChannelDelivery,
+    Delivery,
+    Explanation,
+    ParamValue,
+    Severity,
+    StatsPoint,
+    TemplateRef,
+)
 from tests.factories import T0, make_alert
 
 
@@ -108,3 +119,60 @@ def test_stats_history_is_bounded() -> None:
 
 def test_empty_stats_history() -> None:
     assert StatsHistory(max_points=3).since(minutes=10) == []
+
+
+def explained_alert() -> Alert:
+    return make_alert(
+        explanation=Explanation(
+            detector="error_spike",
+            template=TemplateRef(
+                "7", 'ERROR member-auth msg="login failed" ip=<IP>', "member-auth"
+            ),
+            baseline_band=BaselineBand(median=0.0, upper=5.19, unit="errors/60s"),
+            observed=179.0,
+            first_bad_line="2026-09-28T13:00:00Z ERROR member-auth ip=10.4.2.17",
+            params=[ParamValue("source_ip", "10.4.2.17", 179, 1.0)],
+        )
+    )
+
+
+def test_explanation_round_trips(store: AlertStore) -> None:
+    alert = explained_alert()
+
+    stored = store.save_detection(alert)
+
+    assert stored.explanation == alert.explanation
+    assert stored.to_dict()["params"] == [
+        {"name": "source_ip", "value": "10.4.2.17", "count": 179, "share": 1.0}
+    ]
+
+
+def test_alert_without_explanation_serialises_nulls(store: AlertStore) -> None:
+    data = store.save_detection(make_alert()).to_dict()
+
+    assert data["detector"] is None
+    assert data["template"] is None
+    assert data["baseline_band"] is None
+    assert data["observed"] is None
+    assert data["first_bad_line"] is None
+    assert data["params"] == []
+
+
+def test_database_from_before_explanations_is_migrated(tmp_path: Path) -> None:
+    path = tmp_path / "old.db"
+    old = sqlite3.connect(path)
+    old.executescript(_SCHEMA.replace(",\n    explanation      TEXT", ""))
+    old.execute(
+        "INSERT INTO alerts VALUES ('old1', 'resolved', 'HIGH', 6.0, 0.1, 0.02, "
+        "'2026-09-28T13:00:00Z', '2026-09-28T13:00:00Z', NULL, 'old alert', "
+        "'{}', '[]', 0, '{}')"
+    )
+    old.commit()
+    old.close()
+
+    migrated = AlertStore(path)
+
+    old_alert = migrated.get("old1")
+    assert old_alert is not None
+    assert old_alert.explanation == Explanation()
+    assert migrated.save_detection(explained_alert()).explanation.detector == "error_spike"

@@ -1,6 +1,6 @@
 """Domain objects shared by the pipeline, the store and the API.
 
-The ``to_dict`` methods produce exactly the JSON shapes in CONTRACT.md, which
+The ``to_dict`` methods produce exactly the JSON shapes in docs/contract.md, which
 the dashboard depends on. Timestamps are always serialised as UTC with a
 trailing ``Z``.
 """
@@ -13,6 +13,8 @@ from enum import StrEnum
 from typing import Any, Literal
 
 DeliveryState = Literal["pending", "sent", "failed", "disabled"]
+DetectorName = Literal["error_spike", "silence", "new_pattern", "flow_break"]
+LearningPhase = Literal["learning", "ready"]
 
 
 def to_iso(moment: datetime) -> str:
@@ -55,6 +57,9 @@ class LogEvent:
     raw: str
     source_ip: str | None = None
     http_status: int | None = None
+    # Filled in by the detector's template miner (see ``detection.templates``).
+    template_id: str | None = None
+    params: tuple[tuple[str, str], ...] = ()
 
     @property
     def is_error(self) -> bool:
@@ -63,10 +68,32 @@ class LogEvent:
 
 
 @dataclass(frozen=True, slots=True)
+class LearningState:
+    """How far the detector is through its warm-up."""
+
+    state: LearningPhase
+    buckets_seen: int
+    buckets_needed: int
+    templates: int
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialise to the contract's ``learning`` object."""
+        return {
+            "state": self.state,
+            "buckets_seen": self.buckets_seen,
+            "buckets_needed": self.buckets_needed,
+            "templates": self.templates,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class StatsPoint:
     """Sliding-window statistics published once per closed bucket.
 
-    ``error_rate`` and ``score`` are None when the window held no lines.
+    ``error_rate``, ``baseline_median``, ``band_upper`` and ``score`` describe
+    the global error rate, which feeds the chart; ``error_rate`` and ``score``
+    are None when the window held no lines. ``severity`` is the highest
+    severity any detector reported for this bucket.
     """
 
     ts: datetime
@@ -77,6 +104,7 @@ class StatsPoint:
     band_upper: float | None
     score: float | None
     severity: Severity | None
+    learning: LearningState | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Serialise to the contract's StatsPoint JSON."""
@@ -89,6 +117,7 @@ class StatsPoint:
             "band_upper": _round_or_none(self.band_upper, 4),
             "score": _round_or_none(self.score, 2),
             "severity": self.severity.value if self.severity else None,
+            "learning": self.learning.to_dict() if self.learning else None,
         }
 
 
@@ -133,6 +162,113 @@ class TopContributors:
             services=[Contributor.from_dict(c) for c in data.get("services", [])],
             messages=[Contributor.from_dict(c) for c in data.get("messages", [])],
             source_ips=[Contributor.from_dict(c) for c in data.get("source_ips", [])],
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class TemplateRef:
+    """The log template an alert is about."""
+
+    id: str
+    text: str
+    service: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialise to ``{"id", "text", "service"}``."""
+        return {"id": self.id, "text": self.text, "service": self.service}
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> TemplateRef:
+        """Inverse of :meth:`to_dict`."""
+        return cls(id=str(data["id"]), text=data["text"], service=data.get("service"))
+
+
+@dataclass(frozen=True, slots=True)
+class BaselineBand:
+    """The normal range a detector compared against: median and upper edge, in ``unit``."""
+
+    median: float
+    upper: float
+    unit: str
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialise to ``{"median", "upper", "unit"}``."""
+        return {"median": round(self.median, 4), "upper": round(self.upper, 4), "unit": self.unit}
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> BaselineBand:
+        """Inverse of :meth:`to_dict`."""
+        return cls(median=float(data["median"]), upper=float(data["upper"]), unit=data["unit"])
+
+
+@dataclass(frozen=True, slots=True)
+class ParamValue:
+    """A template parameter value behind many of an alert's lines, e.g. one source IP."""
+
+    name: str
+    value: str
+    count: int
+    share: float
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialise to ``{"name", "value", "count", "share"}``."""
+        return {
+            "name": self.name,
+            "value": self.value,
+            "count": self.count,
+            "share": round(self.share, 2),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ParamValue:
+        """Inverse of :meth:`to_dict`."""
+        return cls(
+            name=data["name"],
+            value=data["value"],
+            count=int(data["count"]),
+            share=float(data["share"]),
+        )
+
+
+@dataclass(slots=True)
+class Explanation:
+    """Why an alert fired: which detector, on which template, against which band.
+
+    Every field is optional so alerts stored before these fields existed
+    still load.
+    """
+
+    detector: DetectorName | None = None
+    template: TemplateRef | None = None
+    baseline_band: BaselineBand | None = None
+    observed: float | None = None
+    first_bad_line: str | None = None
+    params: list[ParamValue] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialise to the contract's explanation fields (merged into the Alert JSON)."""
+        return {
+            "detector": self.detector,
+            "template": self.template.to_dict() if self.template else None,
+            "baseline_band": self.baseline_band.to_dict() if self.baseline_band else None,
+            "observed": _round_or_none(self.observed, 4),
+            "first_bad_line": self.first_bad_line,
+            "params": [p.to_dict() for p in self.params],
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Explanation:
+        """Inverse of :meth:`to_dict`."""
+        template = data.get("template")
+        band = data.get("baseline_band")
+        observed = data.get("observed")
+        return cls(
+            detector=data.get("detector"),
+            template=TemplateRef.from_dict(template) if template else None,
+            baseline_band=BaselineBand.from_dict(band) if band else None,
+            observed=None if observed is None else float(observed),
+            first_bad_line=data.get("first_bad_line"),
+            params=[ParamValue.from_dict(p) for p in data.get("params", [])],
         )
 
 
@@ -196,6 +332,7 @@ class Alert:
     resolved_at: datetime | None = None
     acknowledged: bool = False
     delivery: Delivery = field(default_factory=Delivery)
+    explanation: Explanation = field(default_factory=Explanation)
 
     def to_dict(self) -> dict[str, Any]:
         """Serialise to the contract's Alert JSON."""
@@ -214,6 +351,7 @@ class Alert:
             "sample_lines": list(self.sample_lines),
             "acknowledged": self.acknowledged,
             "delivery": self.delivery.to_dict(),
+            **self.explanation.to_dict(),
         }
 
 

@@ -2,13 +2,13 @@
 
 When a Medicaid eligibility service starts failing, the on-call engineer learns within seconds what is failing and where, before members are turned away at the pharmacy.
 
-ClaimsWatch tails a live application log, learns what a normal error rate looks like, flags statistically significant deviations with a severity level, streams them to a dashboard over WebSockets and publishes them to AWS SNS and CloudWatch Logs, with patient identifiers masked before anything leaves the parser.
+ClaimsWatch tails a live application log, learns what normal looks like for each kind of log line, flags statistically significant deviations with a severity level, streams them to a dashboard over WebSockets and publishes them to AWS SNS and CloudWatch Logs, with patient identifiers masked before anything leaves the parser.
 
 Built for the Acentra Health "Build to Care" code-a-thon, problem statement PS1: Real-Time Log Anomaly Detector with Alert Feed.
 
 ![ClaimsWatch dashboard during a simulated database outage](docs/media/demo.gif)
 
-**Replay result:** on a 20-minute generated scenario, a database outage was detected in 20 s (2 buckets) and a credential-stuffing attack in 10 s (1 bucket), with 0 false alarms during normal traffic (`make replay`).
+**Replay result:** on a 20-minute generated scenario, a database outage and a credential-stuffing attack were each detected in 10 s (1 bucket), with 0 false alarms during normal traffic (`make replay`).
 
 ## Requirements coverage
 
@@ -16,8 +16,8 @@ Built for the Acentra Health "Build to Care" code-a-thon, problem statement PS1:
 | --- | --- | --- | --- |
 | 1 | Monitor a continuously growing log file | `backend/app/ingest/tailer.py`, `backend/app/pipeline.py` | `test_tailer.py`: append, partial lines, truncation, rotation, missing file; `test_api.py` writes to a real file and reads the result over the API |
 | 2 | Rolling error rate over a sliding window | `backend/app/detection/window.py` | `test_window.py`: bucket rollover, eviction, empty window |
-| 3 | Baseline for normal behaviour | `backend/app/detection/baseline.py` | `test_baseline.py`: formula, MAD floor, zero MAD, warm-up, outlier resistance |
-| 4 | Detect deviations from the baseline | `backend/app/detection/detector.py` | `test_detector.py`: spike opens one incident, guards, frozen baseline, resolution; `test_replay.py` |
+| 3 | Baseline for normal behaviour | `backend/app/detection/baseline.py` | `test_baseline.py`: formula, MAD floors (fixed and Poisson), zero MAD, warm-up, outlier resistance, per-template baselines and their cap |
+| 4 | Detect deviations from the baseline | `backend/app/detection/detector.py`, `error_spike.py`, `templates.py` | `test_detector.py`: per-template spikes, one incident per template, guards, frozen baseline, resolution; `test_templates.py`; `test_replay.py` |
 | 5 | Severity levels | `backend/app/detection/severity.py` | `test_severity.py`: every boundary; escalation in `test_detector.py` |
 | 6 | Real-time frontend over WebSockets | `backend/app/api/ws.py`, `backend/app/api/routes.py`, `frontend/` | `test_ws.py`, WebSocket tests in `test_api.py`; frontend Vitest suite |
 | 7 | Display alerts as they are generated | `frontend/src/components/AlertFeed.tsx`, `AlertCard.tsx` | `AlertFeed.test.tsx`, `AlertCard.test.tsx`; live demo |
@@ -31,7 +31,7 @@ Beyond the minimum: PHI masking (`ingest/masking.py`), top-contributor attributi
 flowchart LR
     log[(app.log)] --> tailer[Tailer]
     tailer --> parser[Parser + PHI masking]
-    parser --> detector[Detector<br/>window, baseline, severity, incidents]
+    parser --> detector[Detector<br/>Drain3 templates, window, baselines, incidents]
     clock((10 s clock)) --> detector
     detector -->|stats| ws[WebSocket /ws]
     detector -->|incident| store[(SQLite)]
@@ -48,19 +48,23 @@ The backend is one FastAPI process. The detector is pure Python with no I/O, so 
 
 ## How detection works
 
-1. **Sliding window.** Log lines are counted into 10-second buckets. The error rate is errors divided by total lines over the last six buckets (60 seconds), recomputed every 10 seconds.
-2. **Baseline.** The detector keeps the last 30 window error rates seen during normal operation and takes their median and median absolute deviation (MAD). It starts scoring after six samples, roughly two minutes after startup.
-3. **Score.** Each new rate gets a modified z-score (Iglewicz and Hoaglin, 1993):
+No machine-learning model: every alert comes from a robust statistic that can be explained in one sentence.
+
+1. **Templates.** Each masked line is matched to a log template with [Drain3](https://github.com/logpai/Drain3), an online log parser. Lines that differ only in request IDs, latencies or IP addresses share a template, for example `ERROR claim-adjudication msg="DB connection timeout" <*> member_id=<MEMBER_ID> ... ip=<IP> status=503 <*>`, and the varying tokens become named parameters (`source_ip=10.4.2.17`). Masking runs first, so PHI never reaches the miner or the template text. The number of templates kept in memory is capped (`MAX_TEMPLATES`).
+2. **Sliding window.** Lines are counted into 10-second buckets; the window is the last six buckets (60 seconds), recomputed every 10 seconds. Error lines are counted per template as well as in total.
+3. **Baseline per template.** For every error template the detector keeps the last 30 window counts seen during normal operation, and scores the current count with the modified z-score (Iglewicz and Hoaglin, 1993):
 
    ```
-   score = 0.6745 * (rate - median) / max(MAD, MAD_FLOOR)
+   score = 0.6745 * (x - median) / MAD
    ```
 
-   Median and MAD are used instead of mean and standard deviation because one past spike barely moves them. The MAD floor stops a very steady service from turning tiny wobbles into huge scores.
-4. **Severity.** WARNING at 3.5 (the published outlier cut-off), HIGH at 5 and CRITICAL at 8 (our escalation choices). All thresholds are configurable.
-5. **Minimum-count guard.** No alert unless the window has at least 5 errors and 50 lines; 3 errors out of 5 lines is 60% but means nothing.
-6. **Incidents.** The first anomalous bucket opens an incident. Later anomalous buckets update it, and a higher severity escalates it. Three consecutive normal buckets resolve it. While an incident is open the baseline is frozen, so an outage never becomes the new normal.
-7. **Explanation.** Error lines in the window are counted by service, message template and source IP. The summary names the dominant cause, for example `84% of errors come from claim-adjudication: DB connection timeout` or `185 failed logins from 10.4.2.17 in the last 60s`.
+   `x` is the template's error count in the window. Median and MAD are used instead of mean and standard deviation because one past spike barely moves them. MAD is floored at `TEMPLATE_MAD_FLOOR` (1 error) and at the scatter of a Poisson count with the same median, `0.6745 * sqrt(median)`, so ordinary random arrivals in a busy template are never mistaken for a spike. A template seen for the first time starts from a history of zeros, so a brand-new failure is scored at once. Scoring starts after six learned windows, roughly two minutes after startup.
+4. **Severity tiers.** WARNING when the score is at least 3.5 (the Iglewicz and Hoaglin outlier cut-off), HIGH at 5 and CRITICAL at 8 (our escalation choices). All three are configurable (`THRESHOLD_WARNING`, `THRESHOLD_HIGH`, `THRESHOLD_CRITICAL`).
+5. **Minimum-count guard.** No alert unless the template has at least 5 errors in the window and the window holds at least 50 lines.
+6. **Incidents.** One alert per incident, keyed by detector and template: the first anomalous bucket opens it, later ones update it in place and a higher severity escalates it. Three consecutive normal buckets resolve it. While any incident is open no baseline learns, so an outage never becomes the new normal.
+7. **Explanation.** Each alert names its detector and template, the baseline band it broke (median and upper edge, in errors per 60 s), the observed count, the first masked line that crossed the band, and the dominant parameter values. The summary is one sentence, for example `74% of errors come from claim-adjudication: DB connection timeout` or `179 failed logins from 10.4.2.17 in the last 60s`, where the IP comes from the template's parameters.
+
+The global error rate is still computed, scored against its own median and MAD, and drawn on the dashboard chart; it is the control the per-template detector is compared with, but it no longer raises alerts itself.
 
 ## Privacy
 
@@ -137,9 +141,9 @@ The backend suite has one test file per module, including moto-backed AWS delive
 
 | Suite | Result |
 | --- | --- |
-| Backend (`make check`) | 150 tests passing; ruff and mypy `--strict` clean |
+| Backend (`make check`) | 217 tests passing; ruff and mypy `--strict` clean |
 | Frontend (`npm test`, Node 22) | 87 tests passing; ESLint, `tsc`, Prettier and production build clean |
-| Replay (`make replay`, 48,363 lines) | DB outage detected in 20 s (2 buckets), credential stuffing in 10 s (1 bucket), 0 false alarms |
+| Replay (`make replay`, 48,363 lines) | DB outage detected in 10 s (1 bucket), credential stuffing in 10 s (1 bucket), 0 false alarms |
 
 ## Project structure
 
@@ -152,7 +156,8 @@ backend/
     pipeline.py          tailer -> parser -> detector -> store -> WebSocket / AWS
     services.py          component wiring
     ingest/              tailer.py, parser.py, masking.py
-    detection/           window.py, baseline.py, severity.py, contributors.py, detector.py
+    detection/           templates.py (Drain3), window.py, baseline.py, error_spike.py,
+                         incidents.py, severity.py, contributors.py, detector.py
     alerts/              store.py (SQLite), publisher.py (SNS + CloudWatch Logs)
     api/                 routes.py (REST + /ws), ws.py (connection manager)
   tests/                 one test file per module
