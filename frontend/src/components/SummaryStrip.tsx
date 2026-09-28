@@ -1,5 +1,5 @@
-import { SEVERITIES, SEVERITY_THRESHOLD } from '../lib/severity';
-import { formatCount, formatPercent, formatScore, startOfLocalDay } from '../lib/format';
+import { SEVERITIES, SEVERITY_LABEL } from '../lib/severity';
+import { formatCount, formatPercent, startOfLocalDay } from '../lib/format';
 import type { Alert, Severity, StatsPoint } from '../types';
 import { SeverityBadge } from './SeverityBadge';
 
@@ -20,13 +20,17 @@ function countToday(alerts: Alert[], now: number): Record<Severity, number> {
   return counts;
 }
 
-/** A compact row of the numbers an on-call engineer checks first. */
+/**
+ * The four numbers an on-call engineer checks first. The global error rate is
+ * shown against its own normal range for context; alerts come from the
+ * per-template detector, whose scores appear on each incident.
+ */
 export function SummaryStrip({ latest, alerts, now, windowSeconds = 60 }: SummaryStripProps) {
   const openCount = alerts.filter((a) => a.status === 'open').length;
   const today = countToday(alerts, now);
 
   return (
-    <section className="summary-strip panel" aria-label="Current summary">
+    <section className="summary-strip" aria-label="Current summary">
       <dl className="summary-strip__grid">
         <div className="metric">
           <dt>Error rate ({windowSeconds}s window)</dt>
@@ -36,22 +40,11 @@ export function SummaryStrip({ latest, alerts, now, windowSeconds = 60 }: Summar
           </dd>
         </div>
         <div className="metric">
-          <dt>Baseline median</dt>
+          <dt>Normal up to</dt>
           <dd>
-            <span className="metric__value">{formatPercent(latest?.baseline_median)}</span>
-            {latest?.band_upper != null && (
-              <span className="metric__note">
-                normal up to <span className="mono">{formatPercent(latest.band_upper)}</span>
-              </span>
-            )}
-          </dd>
-        </div>
-        <div className="metric">
-          <dt>Modified z-score</dt>
-          <dd>
-            <span className="metric__value">{formatScore(latest?.score)}</span>
+            <span className="metric__value">{formatPercent(latest?.band_upper)}</span>
             <span className="metric__note">
-              alerts at <span className="mono">{SEVERITY_THRESHOLD.WARNING}</span>
+              median <span className="mono">{formatPercent(latest?.baseline_median)}</span>
             </span>
           </dd>
         </div>
@@ -68,18 +61,16 @@ export function SummaryStrip({ latest, alerts, now, windowSeconds = 60 }: Summar
           <dt>Open incidents</dt>
           <dd>
             <span className="metric__value">{openCount}</span>
-          </dd>
-        </div>
-        <div className="metric">
-          <dt>Alerts today</dt>
-          <dd className="metric__severities">
-            {SEVERITIES.map((severity) => (
-              <span key={severity} className="metric__severity">
-                <span className={`swatch swatch--${severity.toLowerCase()}`} aria-hidden="true" />
-                <span className="metric__severity-label">{severity}</span>
-                <span className="mono">{today[severity]}</span>
-              </span>
-            ))}
+            <span className="metric__note metric__today" aria-label="Alerts opened today">
+              today
+              {SEVERITIES.map((severity) => (
+                <span key={severity} className="metric__severity" title={SEVERITY_LABEL[severity]}>
+                  <span className={`swatch swatch--${severity.toLowerCase()}`} aria-hidden="true" />
+                  <span className="visually-hidden">{SEVERITY_LABEL[severity]}</span>
+                  <span className="mono">{today[severity]}</span>
+                </span>
+              ))}
+            </span>
           </dd>
         </div>
       </dl>

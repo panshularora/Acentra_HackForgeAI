@@ -32,8 +32,30 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
-export function fetchHealth(signal?: AbortSignal): Promise<Health> {
-  return request<Health>('/api/health', { signal });
+/**
+ * /api/health. While ingest is failing, newer backends answer 200 with
+ * `status: "degraded"`. Should a proxy or a later version turn that into a
+ * non-2xx that still carries the JSON body, the body is used anyway, so the
+ * dashboard shows "degraded" rather than treating the backend as unreachable.
+ */
+export async function fetchHealth(signal?: AbortSignal): Promise<Health> {
+  const response = await fetch(`${API_BASE}/api/health`, {
+    signal,
+    headers: { Accept: 'application/json' },
+  });
+  if (response.ok) return (await response.json()) as Health;
+  let body: unknown = null;
+  try {
+    body = await response.json();
+  } catch {
+    // Not JSON: fall through to the error below.
+  }
+  if (body && typeof body === 'object' && 'status' in body) {
+    const health = body as Health;
+    // A 5xx that still says "ok" is not ok.
+    return health.status === 'ok' ? { ...health, status: 'degraded' } : health;
+  }
+  throw new ApiError(response.status, `GET /api/health failed: ${response.status}`);
 }
 
 /** Stats buckets for the last `minutes`, oldest first. */

@@ -146,8 +146,16 @@ export interface PipelineCounters {
   websocket_clients: number;
 }
 
+/**
+ * "ok", or "degraded" while the log-ingest pipeline is failing and retrying
+ * (newer backends only; current main always says "ok").
+ */
+export type HealthStatus = 'ok' | 'degraded';
+
 export interface Health {
-  status: 'ok';
+  status: HealthStatus;
+  /** Newer backends: the last ingest failure while degraded, else null. Absent on main. */
+  ingest_error?: string | null;
   app: string;
   log_path: string;
   tailer_offset: number;

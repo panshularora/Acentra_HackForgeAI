@@ -12,20 +12,37 @@ import type { Severity } from './types';
 export const APP_NAME = 'ClaimsWatch';
 
 export const COLOR = {
-  bg: '#111418',
-  surface: '#171b21',
-  border: '#262b33',
+  bg: '#0e1115',
+  surface: '#14181d',
+  /** Raised surfaces inside a panel (cards, code blocks). */
+  raised: '#191e24',
+  border: '#232930',
   /** Hover/focus outlines and dividers that need a touch more contrast. */
-  borderStrong: '#343a44',
+  borderStrong: '#333a44',
   text: '#e6e8eb',
-  textMuted: '#8a929c',
+  textMuted: '#8e97a1',
   /** Chart-only neutrals. The "normal" band is textMuted at 15% opacity. */
   band: 'rgba(138, 146, 156, 0.15)',
   bandEdge: 'rgba(138, 146, 156, 0.45)',
-  grid: '#1f242b',
+  grid: '#1d2228',
   line: '#e6e8eb',
   /** Used only for the live-connection dot. */
   ok: '#2fb344',
+} as const;
+
+/**
+ * The 3D detector view. Neutral like the rest of the page: the core is silver
+ * when calm and only takes a severity colour while an incident is open. Log
+ * lines are pale dots; error lines are a muted red so the error share is
+ * visible at a glance without competing with the severity colours.
+ */
+export const SCENE_COLOR = {
+  core: '#b9c3ce',
+  coreDim: '#4a525c',
+  line: '#c7cfd8',
+  error: '#e5676a',
+  ring: '#5f6975',
+  rate: '#e6e8eb',
 } as const;
 
 export const SEVERITY_COLOR: Record<Severity, string> = {
@@ -52,7 +69,7 @@ export const SPACE = {
 } as const;
 
 /** One radius everywhere keeps panels, chips and buttons visually related. */
-export const RADIUS = '4px';
+export const RADIUS = '6px';
 
 export const FONT_SIZE = {
   xs: '11px',
@@ -60,7 +77,7 @@ export const FONT_SIZE = {
   md: '13px',
   lg: '15px',
   xl: '20px',
-  xxl: '28px',
+  xxl: '26px',
 } as const;
 
 /** Flattens the tokens above into `--token-name` CSS custom properties. */

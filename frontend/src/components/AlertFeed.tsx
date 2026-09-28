@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { ConnectionState } from '../hooks/alertStreamReducer';
 import type { BaselineState } from '../lib/detector';
-import { SEVERITIES, SEVERITY_LABEL } from '../lib/severity';
+import { SEVERITIES, SEVERITY_LABEL, SEVERITY_THRESHOLD } from '../lib/severity';
 import type { Alert, Severity } from '../types';
 import { AlertCard } from './AlertCard';
 
@@ -95,7 +95,7 @@ export function AlertFeed({
       <header className="panel__header alert-feed__header">
         <div>
           <h2 id="alert-feed-title" className="panel__title">
-            Alerts
+            Incidents
           </h2>
           <p className="panel__subtitle">
             <span className="mono">{openCount}</span> open,{' '}
@@ -103,6 +103,18 @@ export function AlertFeed({
           </p>
         </div>
       </header>
+      <p className="alert-feed__scale">
+        Severity by modified z-score:{' '}
+        {SEVERITIES.slice()
+          .reverse()
+          .map((s, i) => (
+            <span key={s} className="alert-feed__threshold">
+              {i > 0 && ' \u00b7 '}
+              <span className={`swatch swatch--${s.toLowerCase()}`} aria-hidden="true" />{' '}
+              {SEVERITY_LABEL[s]} <span className="mono">&ge; {SEVERITY_THRESHOLD[s]}</span>
+            </span>
+          ))}
+      </p>
       <div className="alert-feed__filters">
         <Segmented
           label="Filter by status"

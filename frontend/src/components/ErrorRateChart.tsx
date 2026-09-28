@@ -128,7 +128,7 @@ function ChartTooltip({ active, payload }: ChartTooltipProps) {
         <dd className="mono">{formatPercent(point.baseline_median)}</dd>
         <dt>Normal up to</dt>
         <dd className="mono">{formatPercent(point.band_upper)}</dd>
-        <dt>Modified z-score</dt>
+        <dt>Global modified z-score</dt>
         <dd className="mono">{formatScore(point.score)}</dd>
         <dt>Errors / lines</dt>
         <dd className="mono">

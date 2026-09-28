@@ -1,4 +1,5 @@
 import { useId, useState } from 'react';
+import { incidentAnchor } from '../lib/anchors';
 import { detectorLabel } from '../lib/detector';
 import {
   formatClock,
@@ -189,7 +190,13 @@ export function AlertCard({ alert, now, isNew = false, onAcknowledge }: AlertCar
     .join(' ');
 
   return (
-    <article className={classes} aria-labelledby={headingId} data-alert-id={alert.id}>
+    <article
+      id={incidentAnchor(alert.id)}
+      className={classes}
+      aria-labelledby={headingId}
+      data-alert-id={alert.id}
+      tabIndex={-1}
+    >
       <header className="alert-card__header">
         <SeverityBadge severity={alert.severity} />
         {detector && (
@@ -210,8 +217,6 @@ export function AlertCard({ alert, now, isNew = false, onAcknowledge }: AlertCar
         {alert.summary}
       </h3>
 
-      <AlertExplanation alert={alert} />
-
       <dl className="alert-card__facts">
         <div>
           <dt>Started</dt>
@@ -224,7 +229,7 @@ export function AlertCard({ alert, now, isNew = false, onAcknowledge }: AlertCar
           <dd className="mono">{duration}</dd>
         </div>
         <div>
-          <dt>Peak z-score</dt>
+          <dt>Peak modified z-score</dt>
           <dd className="mono">{formatScore(alert.score)}</dd>
         </div>
         <div>
@@ -240,11 +245,17 @@ export function AlertCard({ alert, now, isNew = false, onAcknowledge }: AlertCar
         </div>
       </dl>
 
-      <div className="contributors">
-        <ContributorGroup label="Service" items={services} />
-        <ContributorGroup label="Error message" items={messages} mono wrap />
-        <ContributorGroup label="Source IP" items={sourceIps} mono />
-      </div>
+      {/* Open incidents show why they fired; resolved ones fold it away to keep the feed short. */}
+      <details className="alert-card__why" open={isOpen}>
+        <summary>Why it fired</summary>
+        <AlertExplanation alert={alert} />
+        <div className="contributors">
+          <p className="contributors__caption">Share of all errors in the window</p>
+          <ContributorGroup label="Service" items={services} />
+          <ContributorGroup label="Error message" items={messages} mono wrap />
+          <ContributorGroup label="Source IP" items={sourceIps} mono />
+        </div>
+      </details>
 
       {(firstBadLine !== null || sampleCount > 0) && (
         <details className="samples">

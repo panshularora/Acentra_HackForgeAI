@@ -17,6 +17,12 @@ const HISTORY_MINUTES = 10;
 const ALERT_HISTORY_LIMIT = 50;
 const BACKOFF_BASE_MS = 1_000;
 const BACKOFF_MAX_MS = 15_000;
+/**
+ * How often /api/health is re-read while the socket is live. The socket only
+ * carries stats and alerts, so this is how the dashboard learns that ingest
+ * is failing (a "degraded" backend) while the connection itself is fine.
+ */
+export const HEALTH_POLL_MS = 5_000;
 
 /**
  * Exponential backoff with ±20% jitter, so a fleet of dashboards does not
@@ -45,6 +51,7 @@ export function useAlertStream(url: string = alertStreamUrl()): AlertStream {
   useEffect(() => {
     let socket: WebSocket | null = null;
     let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    let healthTimer: ReturnType<typeof setInterval> | undefined;
     let attempt = 0;
     let disposed = false;
     const requests = new AbortController();
@@ -65,6 +72,15 @@ export function useAlertStream(url: string = alertStreamUrl()): AlertStream {
       }
     };
 
+    const pollHealth = async () => {
+      try {
+        const health = await fetchHealth(requests.signal);
+        if (!disposed) dispatch({ type: 'health', health });
+      } catch {
+        // Keep the last known health; a dead backend shows up as a socket close.
+      }
+    };
+
     const scheduleReconnect = () => {
       dispatch({ type: 'connection', state: 'reconnecting' });
       retryTimer = setTimeout(connect, backoffDelay(attempt));
@@ -80,6 +96,8 @@ export function useAlertStream(url: string = alertStreamUrl()): AlertStream {
         attempt = 0;
         dispatch({ type: 'connection', state: 'live' });
         void backfill();
+        clearInterval(healthTimer);
+        healthTimer = setInterval(() => void pollHealth(), HEALTH_POLL_MS);
       };
       ws.onmessage = (event: MessageEvent) => {
         const message = parseWsMessage(event.data);
@@ -88,6 +106,7 @@ export function useAlertStream(url: string = alertStreamUrl()): AlertStream {
       ws.onclose = () => {
         if (disposed || socket !== ws) return;
         socket = null;
+        clearInterval(healthTimer);
         scheduleReconnect();
       };
       // Errors are always followed by a close event, which drives the retry.
@@ -99,6 +118,7 @@ export function useAlertStream(url: string = alertStreamUrl()): AlertStream {
     return () => {
       disposed = true;
       clearTimeout(retryTimer);
+      clearInterval(healthTimer);
       requests.abort();
       if (socket?.readyState === WebSocket.CONNECTING) {
         // Closing mid-handshake logs a browser warning; close once it opens.
