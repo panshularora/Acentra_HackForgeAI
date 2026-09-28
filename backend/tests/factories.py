@@ -15,7 +15,7 @@ def make_event(
     http_status: int | None = None,
 ) -> LogEvent:
     """Build a LogEvent with sensible defaults for tests."""
-    raw = f"2026-09-28T13:00:00Z {level} {service} msg=\"{message}\""
+    raw = f'2026-09-28T13:00:00Z {level} {service} msg="{message}"'
     return LogEvent(
         ts=T0,
         level=level,
