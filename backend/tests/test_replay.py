@@ -32,6 +32,15 @@ def test_incidents_are_explained_correctly(report: replay.ReplayReport) -> None:
     assert cred_stuffing.severity.value == "CRITICAL"
 
 
+def test_credential_stuffing_names_the_ip_when_the_alert_opens(
+    report: replay.ReplayReport,
+) -> None:
+    opened = {r.incident.kind: r.alert for r in report.results}["cred-stuffing"]
+
+    assert opened is not None
+    assert "failed logins from 10.4.2.17" in opened.summary
+
+
 def test_scenario_is_deterministic() -> None:
     scenario = replay.Scenario(duration_s=30, incidents=())
 
