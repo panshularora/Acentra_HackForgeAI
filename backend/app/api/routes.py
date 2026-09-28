@@ -1,10 +1,11 @@
-"""REST and WebSocket endpoints. Shapes follow CONTRACT.md."""
+"""REST and WebSocket endpoints. Shapes follow docs/contract.md."""
 
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket
 from starlette.websockets import WebSocketDisconnect
 
+from app.detection.detector import DETECTORS
 from app.services import Services
 
 router = APIRouter()
@@ -49,7 +50,9 @@ def health(services: ServicesDep) -> dict[str, Any]:
             "window_seconds": detector.window_seconds,
             "bucket_seconds": detector.bucket_seconds,
             "baseline_min_buckets": detector.baseline_min_buckets,
+            "detectors": list(DETECTORS),
         },
+        "learning": services.detector.learning.to_dict(),
         "pipeline": {
             "parsed_lines": services.parser.parsed,
             "malformed_lines": services.parser.malformed,

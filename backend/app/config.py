@@ -44,6 +44,16 @@ class Settings(BaseSettings):
     # wobble look infinitely significant.
     mad_floor: float = Field(default=0.002, gt=0)
 
+    # Alerting scores each log template's error count per window; its MAD floor
+    # is in errors per window, so a template that never errs needs a real burst
+    # (6 errors reach WARNING at the defaults), not one stray line.
+    template_mad_floor: float = Field(default=1.0, gt=0)
+
+    # Drain3 template mining: cap on templates kept in memory (least recently
+    # seen are dropped), and how similar two lines must be to share a template.
+    max_templates: int = Field(default=500, ge=1)
+    template_similarity: float = Field(default=0.5, gt=0, le=1)
+
     # Modified z-score thresholds. 3.5 is the Iglewicz & Hoaglin cut-off; the
     # higher two are our own choices for escalation.
     threshold_warning: float = 3.5

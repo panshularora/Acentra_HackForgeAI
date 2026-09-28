@@ -121,8 +121,7 @@ def run_detector(lines: list[str], config: DetectorConfig) -> tuple[list[Alert],
         nonlocal boundary
         while moment >= boundary:
             result = detector.close_bucket(boundary)
-            event = result.alert_event
-            if event is not None:
+            for event in result.alert_events:
                 final[event.alert.id] = event.alert
                 if event.change is AlertChange.OPENED:
                     opened.append(event.alert)

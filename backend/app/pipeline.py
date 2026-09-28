@@ -79,8 +79,8 @@ class Pipeline:
         result = self.detector.close_bucket(end)
         self.stats.append(result.stats)
         await self.clients.broadcast("stats", result.stats.to_dict())
-        if result.alert_event is not None:
-            await self._handle_alert(result.alert_event.change, result.alert_event.alert)
+        for event in result.alert_events:
+            await self._handle_alert(event.change, event.alert)
         return result
 
     async def record_delivery(self, alert_id: str, delivery: Delivery) -> None:

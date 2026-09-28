@@ -101,6 +101,13 @@ def test_health_reports_pipeline_state(client: TestClient, log_path: Path) -> No
         "window_seconds": 3 * 3600,
         "bucket_seconds": 3600,
         "baseline_min_buckets": 3,
+        "detectors": ["error_spike"],
+    }
+    assert body["learning"] == {
+        "state": "learning",
+        "buckets_seen": 0,
+        "buckets_needed": 3,
+        "templates": 1,
     }
     assert body["pipeline"] == {
         "parsed_lines": 5,
@@ -132,6 +139,7 @@ def test_stats_endpoint_returns_closed_buckets(client: TestClient, log_path: Pat
         "band_upper",
         "score",
         "severity",
+        "learning",
     }
 
 
@@ -151,6 +159,12 @@ def test_incident_appears_in_alert_list(client: TestClient, log_path: Path) -> N
     assert alert["summary"] == "100% of errors come from claim-adjudication: DB connection timeout"
     assert alert["delivery"]["sns"]["status"] == "disabled"
     assert all("<MEMBER_ID>" in line for line in alert["sample_lines"])
+    assert alert["detector"] == "error_spike"
+    assert alert["template"]["service"] == "claim-adjudication"
+    assert 'msg="DB connection timeout"' in alert["template"]["text"]
+    assert alert["baseline_band"]["unit"] == f"errors/{3 * 3600}s"
+    assert alert["observed"] >= 60
+    assert "<MEMBER_ID>" in alert["first_bad_line"]
 
 
 def test_acknowledge_alert(client: TestClient, log_path: Path) -> None:
