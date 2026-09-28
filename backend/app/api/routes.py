@@ -19,6 +19,12 @@ def get_services(request: Request) -> Services:
 ServicesDep = Annotated[Services, Depends(get_services)]
 
 
+@router.get("/health", include_in_schema=False)
+def liveness() -> dict[str, str]:
+    """Minimal liveness probe for load balancers and container health checks."""
+    return {"status": "ok"}
+
+
 @router.get("/api/health")
 def health(services: ServicesDep) -> dict[str, Any]:
     """Liveness plus enough detail to tell whether ingestion and AWS are wired up."""
