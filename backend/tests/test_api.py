@@ -1,3 +1,5 @@
+import json
+import sqlite3
 import time
 from collections.abc import Iterator
 from datetime import timedelta
@@ -10,6 +12,7 @@ from moto import mock_aws
 from app.config import Settings
 from app.main import create_app
 from app.services import Services
+from tests.aws import cloudwatch_messages, receive_envelopes, subscribe_queue
 from tests.factories import T0
 
 # Buckets are an hour long so the background clock never fires during a test;
@@ -45,13 +48,19 @@ def services_of(client: TestClient) -> Services:
     return services
 
 
-def write_lines(client: TestClient, log_path: Path, total: int, errors: int) -> None:
+def write_lines(
+    client: TestClient,
+    log_path: Path,
+    total: int,
+    errors: int,
+    error_message: str = "DB connection timeout",
+) -> None:
     """Append lines and wait until the pipeline has parsed them."""
     services = services_of(client)
     expected = services.parser.parsed + total
     with log_path.open("a") as handle:
         for n in range(total):
-            level, message = ("ERROR", "DB connection timeout") if n < errors else ("INFO", "ok")
+            level, message = ("ERROR", error_message) if n < errors else ("INFO", "ok")
             handle.write(
                 f'2026-09-28T13:00:00Z {level} claim-adjudication msg="{message}" '
                 f"member_id=M{1000000 + n} ip=10.0.0.{n % 250} status=503\n"
@@ -68,11 +77,13 @@ def close_buckets(client: TestClient, count: int, start: int = 0) -> None:
         client.portal.call(pipeline.close_bucket, T0 + timedelta(hours=n + 1))  # type: ignore[union-attr]
 
 
-def run_incident(client: TestClient, log_path: Path) -> None:
+def run_incident(
+    client: TestClient, log_path: Path, error_message: str = "DB connection timeout"
+) -> None:
     for n in range(6):
-        write_lines(client, log_path, total=100, errors=2)
+        write_lines(client, log_path, total=100, errors=2, error_message=error_message)
         close_buckets(client, 1, start=n)
-    write_lines(client, log_path, total=100, errors=60)
+    write_lines(client, log_path, total=100, errors=60, error_message=error_message)
     close_buckets(client, 1, start=6)
 
 
@@ -211,3 +222,36 @@ def test_alert_delivery_to_aws_is_reported_on_the_feed(
     assert alerts[-1]["delivery"]["sns"]["status"] == "sent"
     assert alerts[-1]["delivery"]["sns"]["message_id"]
     assert alerts[-1]["delivery"]["cloudwatch"]["status"] == "sent"
+
+
+def test_phi_never_reaches_the_store_the_feed_or_aws(
+    tmp_path: Path, log_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for key in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"):
+        monkeypatch.setenv(key, "testing")
+    member_id, phone = "M7310042", "(212) 555-0142"
+    overrides = {**TEST_SETTINGS, "aws_enabled": True, "aws_endpoint_url": None}
+    settings = Settings(log_path=log_path, db_path=tmp_path / "phi.db", **overrides)
+
+    with mock_aws(), TestClient(create_app(settings)) as aws_client:
+        topic_arn = aws_client.get("/api/health").json()["aws"]["sns_topic_arn"]
+        queue_url = subscribe_queue(topic_arn)
+        with aws_client.websocket_connect("/ws") as ws:
+            run_incident(aws_client, log_path, f"lookup failed for {member_id}, call {phone}")
+            feed = [ws.receive_json() for _ in range(9)]
+        sns = [envelope["Message"] for envelope in receive_envelopes(queue_url)]
+        cloudwatch = cloudwatch_messages(settings.cw_log_group, settings.cw_log_stream)
+    with sqlite3.connect(settings.db_path) as db:
+        rows = db.execute("SELECT * FROM alerts").fetchall()
+
+    assert len(rows) == len(sns) == len(cloudwatch) == 1
+    outputs = {
+        "sqlite": json.dumps(rows),
+        "websocket": json.dumps(feed),
+        "sns": json.dumps(sns),
+        "cloudwatch": json.dumps(cloudwatch),
+    }
+    for channel, text in outputs.items():
+        assert member_id not in text, channel
+        assert phone not in text and "555-0142" not in text, channel
+        assert "for <MEMBER_ID>, call <PHONE>" in text, channel
