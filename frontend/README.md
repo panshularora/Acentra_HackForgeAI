@@ -43,15 +43,15 @@ page refresh or a backend restart never leaves a gap in the chart or the feed.
 
 ## Layout of `src/`
 
-| Path | Purpose |
-| --- | --- |
-| `types.ts` | Wire types for REST and WebSocket payloads, matching the backend contract |
-| `theme.ts` | Every colour, font, size and spacing token; applied as CSS variables |
-| `api/client.ts` | Fetch helpers for `/api/health`, `/api/stats`, `/api/alerts` and acknowledge |
-| `hooks/useAlertStream.ts` | WebSocket lifecycle: reconnect with backoff, backfill on connect |
-| `hooks/alertStreamReducer.ts` | Pure state rules: merge stats, upsert alerts, route messages |
-| `lib/` | Pure helpers: formatting, baseline progress, chart axis steps |
-| `components/` | Status bar, summary strip, error-rate chart, alert feed and cards |
+| Path                          | Purpose                                                                      |
+| ----------------------------- | ---------------------------------------------------------------------------- |
+| `types.ts`                    | Wire types for REST and WebSocket payloads, matching the backend contract    |
+| `theme.ts`                    | Every colour, font, size and spacing token; applied as CSS variables         |
+| `api/client.ts`               | Fetch helpers for `/api/health`, `/api/stats`, `/api/alerts` and acknowledge |
+| `hooks/useAlertStream.ts`     | WebSocket lifecycle: reconnect with backoff, backfill on connect             |
+| `hooks/alertStreamReducer.ts` | Pure state rules: merge stats, upsert alerts, route messages                 |
+| `lib/`                        | Pure helpers: formatting, baseline progress, chart axis steps                |
+| `components/`                 | Status bar, summary strip, error-rate chart, alert feed and cards            |
 
 ## Docker
 
