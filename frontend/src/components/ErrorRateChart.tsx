@@ -182,7 +182,7 @@ export function ErrorRateChart({ stats, baseline, connection }: ErrorRateChartPr
           </p>
         ) : (
           <>
-            {baseline.kind === 'learning' && (
+            {(baseline.kind === 'filling' || baseline.kind === 'learning') && (
               <p className="chart-panel__notice" role="status">
                 {describeBaseline(baseline)}. The normal range and alerting start once it is ready.
               </p>
