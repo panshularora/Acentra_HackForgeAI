@@ -24,7 +24,8 @@ const TICK_INTERVAL_MS = 60 * 1000;
 
 interface ChartDatum {
   t: number;
-  rate: number;
+  /** Null when the window held no lines: the rate is undefined, not 0%. */
+  rate: number | null;
   /** [baseline median, band upper] for the ranged area; null while learning. */
   band: [number, number] | null;
   median: number | null;
@@ -41,7 +42,7 @@ function toDatum(point: StatsPoint): ChartDatum {
   const { baseline_median: median, band_upper: upper } = point;
   return {
     t: Date.parse(point.ts),
-    rate: point.error_rate,
+    rate: point.total > 0 ? point.error_rate : null,
     band: median !== null && upper !== null ? [median, upper] : null,
     median,
     point,
@@ -144,7 +145,9 @@ export function ErrorRateChart({ stats, baseline, connection }: ErrorRateChartPr
 
   const end = data[data.length - 1]?.t ?? 0;
   const start = end - VISIBLE_WINDOW_MS;
-  const yAxis = percentAxis(Math.max(0, ...data.map((d) => Math.max(d.rate, d.band?.[1] ?? 0))));
+  const yAxis = percentAxis(
+    Math.max(0, ...data.map((d) => Math.max(d.rate ?? 0, d.band?.[1] ?? 0))),
+  );
   const yDigits = yAxis.ticks.some((t) => Math.round(t * 1000) % 10 !== 0) ? 1 : 0;
   const axisTick = { fill: COLOR.textMuted, fontSize: 11, fontFamily: FONT.mono };
 
