@@ -23,6 +23,12 @@ const VISIBLE_WINDOW_MS = 10 * 60 * 1000;
 const TICK_INTERVAL_MS = 60 * 1000;
 const TICK_EDGE_GAP_MS = 20 * 1000;
 
+const EMPTY_MESSAGE: Record<ConnectionState, string> = {
+  connecting: 'Connecting to the live stream.',
+  live: `Waiting for the first ${BUCKET_SECONDS}-second bucket from the log tailer.`,
+  reconnecting: 'The backend is unreachable. Retrying automatically.',
+};
+
 interface ChartDatum {
   t: number;
   /** Null when the window held no lines: the rate is undefined, not 0%. */
@@ -182,11 +188,7 @@ export function ErrorRateChart({ stats, baseline, connection }: ErrorRateChartPr
 
       <div className="chart-panel__body">
         {data.length === 0 ? (
-          <p className="empty-state">
-            {connection === 'live'
-              ? `Waiting for the first ${BUCKET_SECONDS}-second bucket from the log tailer.`
-              : 'Connecting to the live stream.'}
-          </p>
+          <p className="empty-state">{EMPTY_MESSAGE[connection]}</p>
         ) : (
           <>
             {(baseline.kind === 'filling' || baseline.kind === 'learning') && (

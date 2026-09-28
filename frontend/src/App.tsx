@@ -1,4 +1,5 @@
 import { AlertFeed } from './components/AlertFeed';
+import { ConnectionBanner } from './components/ConnectionBanner';
 import { ErrorRateChart } from './components/ErrorRateChart';
 import { StatusBar } from './components/StatusBar';
 import { SummaryStrip } from './components/SummaryStrip';
@@ -20,6 +21,7 @@ export function App() {
         health={stream.health}
         now={now}
       />
+      <ConnectionBanner connection={stream.connection} lastUpdate={latest?.ts} />
       <main className="layout">
         <div className="layout__primary">
           <SummaryStrip latest={latest} alerts={stream.alerts} now={now} />

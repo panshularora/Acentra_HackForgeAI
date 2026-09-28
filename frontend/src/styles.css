@@ -82,9 +82,13 @@ ul {
 /* ---------- Layout ---------- */
 
 .app {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   height: 100%;
+}
+
+.app > .layout {
+  flex: 1;
 }
 
 .layout {
@@ -230,6 +234,14 @@ ul {
 .status-bar__clock {
   padding-left: var(--space-6);
   border-left: 1px solid var(--color-border);
+}
+
+.connection-banner {
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: var(--text-sm);
 }
 
 /* ---------- Summary strip ---------- */

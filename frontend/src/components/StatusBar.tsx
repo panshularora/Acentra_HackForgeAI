@@ -24,8 +24,10 @@ interface StatusBarProps {
 }
 
 export function StatusBar({ connection, baseline, health, now }: StatusBarProps) {
-  const snsTopic = arnResourceName(health?.aws.sns_topic_arn);
-  const logGroup = health?.aws.cloudwatch_log_group ?? null;
+  // Until /api/health answers, the targets are unknown rather than disabled.
+  const unknown = '\u2014';
+  const snsTopic = health ? (arnResourceName(health.aws.sns_topic_arn) ?? 'disabled') : unknown;
+  const logGroup = health ? (health.aws.cloudwatch_log_group ?? 'disabled') : unknown;
 
   return (
     <header className="status-bar">
@@ -50,15 +52,15 @@ export function StatusBar({ connection, baseline, health, now }: StatusBarProps)
       <dl className="status-bar__meta">
         <div className="status-bar__item">
           <dt>Log source</dt>
-          <dd className="mono">{health?.log_path ?? '\u2014'}</dd>
+          <dd className="mono">{health?.log_path ?? unknown}</dd>
         </div>
         <div className="status-bar__item">
           <dt>SNS topic</dt>
-          <dd className="mono">{snsTopic ?? 'disabled'}</dd>
+          <dd className="mono">{snsTopic}</dd>
         </div>
         <div className="status-bar__item">
           <dt>CloudWatch group</dt>
-          <dd className="mono">{logGroup ?? 'disabled'}</dd>
+          <dd className="mono">{logGroup}</dd>
         </div>
         <div className="status-bar__item status-bar__clock">
           <dt className="visually-hidden">Current time</dt>
