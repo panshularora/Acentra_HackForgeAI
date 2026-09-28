@@ -23,12 +23,17 @@ ServicesDep = Annotated[Services, Depends(get_services)]
 def health(services: ServicesDep) -> dict[str, Any]:
     """Liveness plus enough detail to tell whether ingestion and AWS are wired up."""
     settings = services.settings
+    publisher = services.publisher
     return {
         "status": "ok",
         "app": settings.app_name,
         "log_path": str(settings.log_path),
         "tailer_offset": services.tailer.offset,
-        "aws": {"sns_topic_arn": None, "cloudwatch_log_group": None, "endpoint": None},
+        "aws": {
+            "sns_topic_arn": publisher.topic_arn if publisher else None,
+            "cloudwatch_log_group": publisher.log_group if publisher else None,
+            "endpoint": settings.aws_endpoint_url if publisher else None,
+        },
         "pipeline": {
             "parsed_lines": services.parser.parsed,
             "malformed_lines": services.parser.malformed,

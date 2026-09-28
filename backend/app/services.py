@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 
+from app.alerts.publisher import AlertPublisher
 from app.alerts.store import AlertStore, StatsHistory
 from app.api.ws import ConnectionManager
 from app.config import Settings
@@ -23,6 +24,7 @@ class Services:
     parser: LogParser
     detector: Detector
     pipeline: Pipeline
+    publisher: AlertPublisher | None
 
     def close(self) -> None:
         """Release files and database connections."""
@@ -42,6 +44,7 @@ def build_services(settings: Settings) -> Services:
         from_start=settings.tail_from_start,
     )
     parser = LogParser()
+    publisher = AlertPublisher(settings) if settings.aws_enabled else None
     pipeline = Pipeline(
         tailer=tailer,
         parser=parser,
@@ -49,5 +52,8 @@ def build_services(settings: Settings) -> Services:
         store=store,
         stats=stats,
         clients=clients,
+        sink=publisher,
     )
-    return Services(settings, store, stats, clients, tailer, parser, detector, pipeline)
+    if publisher is not None:
+        publisher.on_delivery = pipeline.record_delivery
+    return Services(settings, store, stats, clients, tailer, parser, detector, pipeline, publisher)

@@ -1,8 +1,9 @@
 """FastAPI application factory and process lifecycle.
 
-On startup the lifespan handler builds the shared components and starts the
-pipeline as a background task; on shutdown it cancels the task and closes the
-database and log file. ``uvicorn app.main:app`` serves the module-level app.
+On startup the lifespan handler builds the shared components, prepares AWS
+resources and starts the pipeline as a background task; on shutdown it cancels
+the tasks and closes the database and log file. ``uvicorn app.main:app``
+serves the module-level app.
 """
 
 import asyncio
@@ -29,6 +30,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         services = build_services(settings)
         app.state.services = services
+        if services.publisher is not None:
+            await services.publisher.start()
         task = asyncio.create_task(services.pipeline.run(), name="pipeline")
         logger.info("%s watching %s", settings.app_name, settings.log_path)
         try:
@@ -37,6 +40,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await task
+            if services.publisher is not None:
+                await services.publisher.stop()
             services.close()
 
     app = FastAPI(title=settings.app_name, version=__version__, lifespan=lifespan)
