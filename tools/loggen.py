@@ -132,7 +132,7 @@ WARN_SHARE = 0.03
 
 INCIDENTS: dict[str, tuple[str, float]] = {
     # name: (description, extra lines per second)
-    "db-outage": ("claim-adjudication database timeouts", 2.0),
+    "db-outage": ("claim-adjudication database timeouts", 3.0),
     "cred-stuffing": (f"failed member logins from {CRED_STUFFING_IP}", 6.0),
 }
 
