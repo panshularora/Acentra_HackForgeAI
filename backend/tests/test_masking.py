@@ -17,6 +17,7 @@ from app.ingest.masking import mask, message_template
         ("call +1 555 123 4567", "call <PHONE>"),
         ("call +1 (555) 123-4567 or 555.987.6543", "call <PHONE> or <PHONE>"),
         ("call 1-555-123-4567", "call <PHONE>"),
+        ("call 555 123 4567 or (555) 123 4567", "call <PHONE> or <PHONE>"),
         ("sms to +15551234567 failed", "sms to <PHONE> failed"),
         ("phone=5551234567 status=500", "phone=<PHONE> status=500"),
         ("dob=1984-02-11 plan=CHIP", "dob=<DOB> plan=CHIP"),
@@ -40,6 +41,9 @@ def test_mask_leaves_operational_fields_alone() -> None:
         "claim_id=CLM-2026-000123 claim=4417250093 status=503",
         "req=0a1b2c3d epoch_ms=1727514303412 latency_ms=5012",
         "npi=1234567890 retry 3 of 5 after 250ms",
+        "count 100 200 3000",
+        "buffer sizes 128 256 512 1024",
+        "retries 3 250 500 1000 ms",
     ],
 )
 def test_mask_leaves_numbers_that_are_not_phone_numbers_alone(line: str) -> None:
