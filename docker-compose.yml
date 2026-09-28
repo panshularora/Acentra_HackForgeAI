@@ -31,6 +31,7 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+    image: claimswatch-backend
     environment:
       AWS_ENDPOINT_URL: http://moto:5000
       AWS_REGION: us-east-1
@@ -47,10 +48,9 @@ services:
         condition: service_healthy
 
   loggen:
-    # Same image as the backend; writes normal claims traffic to the shared volume.
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
+    # Reuses the backend image; writes normal claims traffic to the shared volume.
+    image: claimswatch-backend
+    pull_policy: never
     command: ["python", "tools/loggen.py", "--rate", "40"]
     healthcheck:
       disable: true
@@ -63,6 +63,7 @@ services:
   frontend:
     # Built dashboard served by nginx, which proxies /api and /ws to "backend".
     build: ./frontend
+    image: claimswatch-frontend
     ports:
       - "5173:80"
     depends_on:
