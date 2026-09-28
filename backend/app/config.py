@@ -7,7 +7,7 @@ the AWS publisher never carry their own magic constants.
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -70,7 +70,16 @@ class Settings(BaseSettings):
     aws_enabled: bool = True
     aws_endpoint_url: str | None = None
     aws_region: str = "us-east-1"
+    # Credentials read here (from the environment or .env) are passed to boto3
+    # explicitly, because pydantic-settings does not export .env values to the
+    # process environment boto3 reads. Unset, boto3 uses its normal chain.
+    aws_access_key_id: SecretStr | None = None
+    aws_secret_access_key: SecretStr | None = None
     sns_topic_name: str = "claimswatch-alerts"
+    # An existing topic to publish to. When set, the topic is not created, so
+    # the credentials only need sns:Publish on it.
+    sns_topic_arn: str | None = None
+    cw_enabled: bool = True
     cw_log_group: str = "/claimswatch/alerts"
     cw_log_stream: str = "anomalies"
 

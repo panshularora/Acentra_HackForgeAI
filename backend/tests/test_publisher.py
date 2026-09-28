@@ -8,7 +8,7 @@ import boto3
 import pytest
 from moto import mock_aws
 
-from app.alerts.publisher import AlertPublisher, sns_subject
+from app.alerts.publisher import AlertPublisher, email_text, sns_subject
 from app.config import Settings
 from app.detection.detector import AlertChange, AlertEvent
 from app.ingest.parser import LogParser
@@ -167,3 +167,56 @@ def test_subject_fits_sns_limit_and_marks_resolution() -> None:
 
     assert len(sns_subject(long_alert, "ClaimsWatch")) == 100
     assert sns_subject(resolved, "ClaimsWatch").startswith("[RESOLVED] ")
+
+
+def test_existing_topic_arn_is_used_without_creating_a_topic(aws: None) -> None:
+    sns = boto3.client("sns", region_name="us-east-1")
+    arn = sns.create_topic(Name="log-anomaly-alerts")["TopicArn"]
+    publisher = AlertPublisher(settings(sns_topic_arn=arn, sns_topic_name="should-not-exist"))
+    publisher.ensure_resources()
+    queue_url = subscribe_queue(arn)
+
+    delivery = publisher.deliver(opened(make_alert("arn1")))
+
+    topics = [t["TopicArn"] for t in sns.list_topics()["Topics"]]
+    assert topics == [arn]
+    assert delivery.sns.status == "sent"
+    assert json.loads(receive_envelopes(queue_url)[0]["Message"])["id"] == "arn1"
+
+
+def test_cloudwatch_can_be_turned_off(aws: None) -> None:
+    publisher = AlertPublisher(settings(cw_enabled=False, cw_log_group="/off/alerts"))
+    publisher.ensure_resources()
+
+    delivery = publisher.deliver(opened(make_alert()))
+
+    groups = boto3.client("logs", region_name="us-east-1").describe_log_groups()["logGroups"]
+    assert publisher.log_group is None
+    assert delivery.sns.status == "sent"
+    assert delivery.cloudwatch.status == "disabled"
+    assert groups == []
+
+
+def test_credentials_from_settings_are_passed_to_boto3() -> None:
+    publisher = AlertPublisher(
+        settings(aws_access_key_id="AKIDEXAMPLE", aws_secret_access_key="example-secret")
+    )
+
+    kwargs = publisher._client_kwargs()
+
+    assert kwargs["aws_access_key_id"] == "AKIDEXAMPLE"
+    assert kwargs["aws_secret_access_key"] == "example-secret"
+
+
+def test_email_text_is_readable_and_masked() -> None:
+    event = opened(critical_alert_from_real_line())
+
+    text = email_text(event, "ClaimsWatch")
+
+    assert text.startswith("ClaimsWatch log anomaly: OPENED")
+    assert "Severity:       CRITICAL" in text
+    assert "Error rate:     31.00% (baseline 2.00%)" in text
+    assert "claim-adjudication (212, 94%)" in text
+    assert "<MEMBER_ID>" in text
+    for pattern in PHI_PATTERNS:
+        assert not re.search(pattern, text), pattern

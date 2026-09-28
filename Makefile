@@ -6,7 +6,7 @@ BIN     := $(VENV)/bin
 RATE    ?= 40
 
 .DEFAULT_GOAL := help
-.PHONY: help install dev test lint format typecheck check loggen incident-db incident-auth incident-new incident-silence incident-flow replay moto feed sns-tail dashboard demo clean
+.PHONY: help install dev test lint format typecheck check loggen incident-db incident-auth incident-new incident-silence incident-flow replay moto feed sns-tail sns-check dashboard demo clean
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-14s %s\n", $$1, $$2}'
@@ -68,6 +68,9 @@ feed: ## Print the live WebSocket feed in the terminal
 
 sns-tail: ## Print alerts as delivered through SNS (via an SQS subscription)
 	$(BIN)/python tools/sns_tail.py
+
+sns-check: ## Send one test alert through the configured SNS topic
+	PYTHONPATH=backend $(BIN)/python tools/sns_check.py
 
 clean: ## Remove caches and local state
 	rm -rf backend/.pytest_cache backend/.mypy_cache backend/.ruff_cache claimswatch.db logs

@@ -76,6 +76,37 @@ def alert_message(event: AlertEvent, app_name: str) -> dict[str, Any]:
     }
 
 
+def email_text(event: AlertEvent, app_name: str) -> str:
+    """Plain-text body for e-mail subscribers, built from the same masked fields."""
+    alert = event.alert
+    lines = [
+        f"{app_name} log anomaly: {event.change.value.upper()}",
+        "",
+        f"Severity:       {alert.severity.value}",
+        f"Status:         {alert.status}",
+        f"Summary:        {alert.summary}",
+        f"Error rate:     {alert.error_rate:.2%} (baseline {alert.baseline_median:.2%})",
+        f"Anomaly score:  {alert.score:.1f} (modified z-score)",
+        f"Opened at:      {alert.opened_at.isoformat()}",
+    ]
+    if alert.resolved_at is not None:
+        lines.append(f"Resolved at:    {alert.resolved_at.isoformat()}")
+    groups = alert.top_contributors
+    for label, contributors in (
+        ("Top services", groups.services),
+        ("Top errors", groups.messages),
+        ("Top source IPs", groups.source_ips),
+    ):
+        if contributors:
+            lines += ["", f"{label}:"]
+            lines += [f"  {c.value} ({c.count}, {c.share:.0%})" for c in contributors[:3]]
+    if alert.sample_lines:
+        lines += ["", "Sample lines (masked):"]
+        lines += [f"  {line}" for line in alert.sample_lines[:3]]
+    lines += ["", f"Alert id: {alert.id}"]
+    return "\n".join(lines)
+
+
 def sns_subject(alert: Alert, app_name: str) -> str:
     """Short e-mail/SMS friendly subject, within SNS's 100 character limit."""
     prefix = "RESOLVED" if alert.status == "resolved" else alert.severity.value
@@ -92,7 +123,7 @@ class AlertPublisher:
         self.settings = settings
         self.on_delivery = on_delivery
         self.topic_arn: str | None = None
-        self.log_group = settings.cw_log_group
+        self.log_group = settings.cw_log_group if settings.cw_enabled else None
         self._log_stream = settings.cw_log_stream
         self._logs_ready = False
         self._queue: asyncio.Queue[AlertEvent] = asyncio.Queue()
@@ -127,12 +158,16 @@ class AlertPublisher:
     def ensure_resources(self) -> None:
         """Create the SNS topic, log group and log stream if missing. Safe to repeat."""
         self._ensure_topic()
-        self._ensure_log_stream()
+        if self.log_group is not None:
+            self._ensure_log_stream()
 
     def deliver(self, event: AlertEvent) -> Delivery:
         """Send one alert transition to both channels synchronously and report the outcome."""
         body = json.dumps(alert_message(event, self.settings.app_name))
-        return Delivery(sns=self._publish_sns(event, body), cloudwatch=self._put_log_event(body))
+        cloudwatch = (
+            self._put_log_event(body) if self.log_group is not None else ChannelDelivery("disabled")
+        )
+        return Delivery(sns=self._publish_sns(event, body), cloudwatch=cloudwatch)
 
     async def _run(self) -> None:
         while True:
@@ -154,10 +189,14 @@ class AlertPublisher:
             topic_arn = self.topic_arn or self._ensure_topic()
             if topic_arn is None:
                 return ChannelDelivery("failed", error="SNS topic unavailable")
+            # E-mail subscribers get readable text; every other protocol
+            # (SQS, HTTP, Lambda) gets the JSON document.
+            message = {"default": body, "email": email_text(event, self.settings.app_name)}
             response = self._sns.publish(
                 TopicArn=topic_arn,
                 Subject=sns_subject(alert, self.settings.app_name),
-                Message=body,
+                Message=json.dumps(message),
+                MessageStructure="json",
                 MessageAttributes={
                     "event": {"DataType": "String", "StringValue": event.change.value},
                     "severity": {"DataType": "String", "StringValue": alert.severity.value},
@@ -174,7 +213,7 @@ class AlertPublisher:
             if not self._logs_ready and not self._ensure_log_stream():
                 return ChannelDelivery("failed", error="CloudWatch log stream unavailable")
             self._logs.put_log_events(
-                logGroupName=self.log_group,
+                logGroupName=self.settings.cw_log_group,
                 logStreamName=self._log_stream,
                 logEvents=[{"timestamp": int(time.time() * 1000), "message": body}],
             )
@@ -184,6 +223,9 @@ class AlertPublisher:
         return ChannelDelivery("sent")
 
     def _ensure_topic(self) -> str | None:
+        if self.settings.sns_topic_arn:
+            self.topic_arn = self.settings.sns_topic_arn
+            return self.topic_arn
         try:
             # CreateTopic is idempotent: it returns the existing ARN if present.
             self.topic_arn = self._sns.create_topic(Name=self.settings.sns_topic_name)["TopicArn"]
@@ -195,10 +237,10 @@ class AlertPublisher:
     def _ensure_log_stream(self) -> bool:
         try:
             with contextlib.suppress(self._logs.exceptions.ResourceAlreadyExistsException):
-                self._logs.create_log_group(logGroupName=self.log_group)
+                self._logs.create_log_group(logGroupName=self.settings.cw_log_group)
             with contextlib.suppress(self._logs.exceptions.ResourceAlreadyExistsException):
                 self._logs.create_log_stream(
-                    logGroupName=self.log_group, logStreamName=self._log_stream
+                    logGroupName=self.settings.cw_log_group, logStreamName=self._log_stream
                 )
         except AWS_ERRORS as error:
             logger.warning("could not create CloudWatch log group/stream: %s", error)
@@ -209,9 +251,13 @@ class AlertPublisher:
 
     def _client_kwargs(self) -> dict[str, Any]:
         kwargs: dict[str, Any] = {"region_name": self.settings.aws_region, "config": BOTO_CONFIG}
+        key_id, secret = self.settings.aws_access_key_id, self.settings.aws_secret_access_key
+        if key_id and secret:
+            kwargs["aws_access_key_id"] = key_id.get_secret_value()
+            kwargs["aws_secret_access_key"] = secret.get_secret_value()
         endpoint = self.settings.aws_endpoint_url
         if endpoint:
             kwargs["endpoint_url"] = endpoint
-            if not os.environ.get("AWS_ACCESS_KEY_ID"):
+            if "aws_access_key_id" not in kwargs and not os.environ.get("AWS_ACCESS_KEY_ID"):
                 kwargs.update(EMULATOR_CREDENTIALS)
         return kwargs

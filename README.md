@@ -78,6 +78,8 @@ Every line is masked in the parser, before any field is extracted: member IDs be
 
 We had no AWS account for the event, so locally it runs against [moto](https://github.com/getmoto/moto), an AWS emulator, by setting `AWS_ENDPOINT_URL`. To use real AWS, remove `AWS_ENDPOINT_URL` and provide credentials through the usual AWS chain (environment variables, `~/.aws/credentials` or an IAM role). No code changes are needed.
 
+To publish to the team topic, copy `.env.example` to `.env` in the repo root, delete `AWS_ENDPOINT_URL`, and set `AWS_REGION=ap-south-1`, `SNS_TOPIC_ARN`, `CW_ENABLED=false` and the two credential variables. Run `make sns-check` to send one test alert, then `make dev`. E-mail subscribers get a plain-text summary; SQS and other subscribers get the JSON document.
+
 ## Quick start
 
 ### Docker
@@ -204,6 +206,9 @@ All settings live in `backend/app/config.py` and can be overridden with environm
 | `AWS_ENDPOINT_URL` | unset | Emulator endpoint, e.g. `http://localhost:5000`; unset for real AWS |
 | `AWS_REGION` | `us-east-1` | AWS region |
 | `SNS_TOPIC_NAME` | `claimswatch-alerts` | SNS topic (created if missing) |
+| `SNS_TOPIC_ARN` | unset | Existing topic to publish to; skips topic creation, so only `sns:Publish` is needed |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | unset | Credentials, read from the environment or `.env`; unset uses the normal AWS chain |
+| `CW_ENABLED` | `true` | Turn CloudWatch Logs delivery off and keep SNS only |
 | `CW_LOG_GROUP` / `CW_LOG_STREAM` | `/claimswatch/alerts` / `anomalies` | CloudWatch Logs destination |
 | `APP_NAME` | `ClaimsWatch` | Name shown in the API and alerts |
 
