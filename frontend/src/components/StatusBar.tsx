@@ -1,5 +1,5 @@
 import type { ConnectionState } from '../hooks/alertStreamReducer';
-import { describeBaseline, type BaselineState } from '../lib/detector';
+import { describeBaseline, detectorTiming, type BaselineState } from '../lib/detector';
 import { arnResourceName, formatClock, timeZoneLabel } from '../lib/format';
 import { APP_NAME } from '../theme';
 import type { Health } from '../types';
@@ -45,7 +45,7 @@ export function StatusBar({ connection, baseline, health, now }: StatusBarProps)
           className={`status-bar__baseline status-bar__baseline--${baseline.kind}`}
           aria-label="Baseline status"
         >
-          {describeBaseline(baseline)}
+          {describeBaseline(baseline, detectorTiming(health).window_seconds)}
         </span>
       </div>
 
