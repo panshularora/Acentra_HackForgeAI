@@ -6,7 +6,9 @@ ClaimsWatch tails a live application log, learns what normal looks like for each
 
 Built for the Acentra Health "Build to Care" code-a-thon, problem statement PS1: Real-Time Log Anomaly Detector with Alert Feed.
 
-![ClaimsWatch dashboard during a simulated database outage](docs/media/demo.gif)
+![ClaimsWatch dashboard during a simulated database outage](docs/media/dashboard-incident.png)
+
+[docs/media/demo.gif](docs/media/demo.gif) is a recording of the earlier dashboard design; the detection it shows is unchanged.
 
 **Replay result:** on a 20-minute generated scenario, a database outage and a credential-stuffing attack were each detected in 10 s (1 bucket), with 0 false alarms during normal traffic (`make replay`).
 
@@ -80,6 +82,10 @@ We had no AWS account for the event, so locally it runs against [moto](https://g
 
 To publish to the team topic, copy `.env.example` to `.env` in the repo root, delete `AWS_ENDPOINT_URL`, and set `AWS_REGION=ap-south-1`, `SNS_TOPIC_ARN`, `CW_ENABLED=false` and the two credential variables. Run `make sns-check` to send one test alert, then `make dev`. E-mail subscribers get a plain-text summary; SQS and other subscribers get the JSON document.
 
+## Health and restarts
+
+`GET /health` returns 200 while log ingest is working and 503 with `{"status": "degraded"}` while it is failing, so Docker and load balancers see a real outage. `GET /api/health` always answers and carries `status` (`ok` or `degraded`) and `ingest_error`, which the dashboard shows as "Monitoring degraded". If the log file disappears or cannot be read, the pipeline retries with backoff (1 s up to 30 s) instead of stopping, and after a transient read error it keeps its place in the file, so old lines are not counted twice. Incidents still open from a previous run are resolved at startup, so a restart never leaves a stale incident on screen (no "resolved" SNS message is sent for those).
+
 ## Quick start
 
 ### Docker
@@ -94,12 +100,10 @@ Open http://localhost:5173 (dashboard) or http://localhost:8000/docs (API). Wait
 docker compose exec loggen python tools/loggen.py --incident db-outage --duration 45
 docker compose exec loggen python tools/loggen.py --incident cred-stuffing --duration 30
 docker compose exec loggen python tools/loggen.py --incident new-error --duration 45
-docker compose exec loggen python tools/loggen.py --incident heartbeat-stop --duration 60
-docker compose exec loggen python tools/loggen.py --incident flow-break --duration 60
 docker compose exec backend python tools/sns_tail.py      # alerts as SNS delivers them
 ```
 
-The stack publishes the dashboard on 5173, the API on 8000 and moto on 5000. If a port is already in use, override it:
+The stack publishes the dashboard on 5173, the API on 8000 and moto on 5000, bound to `127.0.0.1` only because the API has no login. If a port is already in use, override it:
 
 ```bash
 FRONTEND_PORT=8080 BACKEND_PORT=18000 MOTO_PORT=15000 docker compose up --build
@@ -123,15 +127,15 @@ Then `make incident-db`, `make incident-auth`, `make sns-tail` and `make feed` (
 
 ### Log generator and faults
 
-`tools/loggen.py` writes traffic from five claims services with a slightly drifting 2% background error rate, plus two steady signals: `heartbeat service=<name> ok` from `eligibility-sync` and `payment-reconciler` every 5 s, and a claim flow where `claim validated claim_id=<id>` is followed 0.3 to 3 s later by `claim adjudicated claim_id=<id>` for 98% of claims. Member IDs and names are random and masked by the parser like every other line. Five faults can be injected live or in a seeded offline simulation (`loggen.simulate`):
+`tools/loggen.py` writes traffic from five claims services with a slightly drifting 2% background error rate, plus two steady signals: `heartbeat service=<name> ok` from `eligibility-sync` and `payment-reconciler` every 5 s, and a claim flow where `claim validated claim_id=<id>` is followed 0.3 to 3 s later by `claim adjudicated claim_id=<id>` for 98% of claims. Member IDs and names are random and masked by the parser like every other line. Five faults can be injected live or in a seeded offline simulation (`loggen.simulate`). Only the first three are detected today; the silence and flow-break detectors are not written yet (see [docs/ROADMAP.md](docs/ROADMAP.md)), so use `db-outage`, `cred-stuffing` and `new-error` in a demo:
 
 | Fault | Make target | What happens |
 | --- | --- | --- |
 | `db-outage` | `make incident-db` | claim-adjudication times out on its database (3 errors/s) |
 | `cred-stuffing` | `make incident-auth` | one IP sends failed logins to member-auth (6 errors/s) |
 | `new-error` | `make incident-new` | a never-seen `TLS certificate verification failed for payer gateway` error (0.5/s) |
-| `heartbeat-stop` | `make incident-silence` | eligibility-sync stops sending heartbeats |
-| `flow-break` | `make incident-flow` | validated claims stop being adjudicated |
+| `heartbeat-stop` | `make incident-silence` | eligibility-sync stops sending heartbeats (not detected yet) |
+| `flow-break` | `make incident-flow` | validated claims stop being adjudicated (not detected yet) |
 
 The first three append their own lines. `heartbeat-stop` and `flow-break` remove lines, so they need `make loggen` running: the incident command records the fault in `logs/app.log.faults.json` until it ends, and the generator drops the affected lines meanwhile.
 
@@ -153,8 +157,8 @@ The backend suite has one test file per module, including moto-backed AWS delive
 
 | Suite | Result |
 | --- | --- |
-| Backend (`make check`) | 221 tests passing; ruff and mypy `--strict` clean |
-| Frontend (`npm test`, Node 22) | 121 tests passing; ESLint, `tsc`, Prettier and production build clean |
+| Backend (`make check`) | 233 tests passing; ruff and mypy `--strict` clean |
+| Frontend (`npm test`, Node 22) | 164 tests passing; ESLint, `tsc`, Prettier and production build clean |
 | Replay (`make replay`, 48,363 lines) | DB outage detected in 10 s (1 bucket), credential stuffing in 10 s (1 bucket), 0 false alarms |
 
 ## Project structure
@@ -214,9 +218,18 @@ All settings live in `backend/app/config.py` and can be overridden with environm
 
 ## Frontend
 
-The dashboard (`frontend/`, React + TypeScript) keeps one WebSocket open to `/ws`. It plots the 60-second error rate against the learned normal band and shows each incident as a card: a text severity label, the detector that fired, a one-line summary of what broke and where, the log template with its normal band against the observed value and the top extracted parameters, the top services, messages and source IPs, the masked first bad line and sample log lines, SNS and CloudWatch delivery status with the SNS message ID, and an Acknowledge button. If the connection drops, a banner says the data is stale and the dashboard reconnects with backoff, reloading history each time, so a refresh or a backend restart never leaves a gap. Colour is used only for severity, which is always also written as text.
+The dashboard (`frontend/`, React 19, TypeScript, Vite, Recharts, and React Three Fiber for one 3D view) keeps one WebSocket open to `/ws` and re-reads `/api/health` every 5 seconds.
 
-Window length, bucket size and baseline warm-up are read from `/api/health`, so the labels follow the backend configuration. A neutral badge in the header says whether the detector is still learning its baseline ("Learning baseline, 4 of 6 buckets") or monitoring ("Monitoring, 38 templates"), from the `learning` object on each stats bucket, or from `/api/health` before the first bucket arrives; until the baseline is learned, the dashboard says that no alerts can fire yet. The frontend requires Node 22 or newer; see [frontend/README.md](frontend/README.md) for commands and structure.
+- **Status hero.** One sentence says whether anything is wrong: all clear, learning the baseline, an open incident with its summary, monitoring degraded, or backend unreachable. Below it are the four key numbers: the 60-second error rate, the upper edge of normal, log lines in the window and open incidents.
+- **3D detector view.** Each dot is a log line flowing into the detector core, with error lines in red, at the live line rate and error share. A dashed ring marks the edge of normal and a solid ring the current error rate. The core takes the severity colour, pulses when an incident opens or escalates, and dims while ingest is degraded. It is lazy-loaded, caps the pixel ratio, stops rendering when hidden, respects `prefers-reduced-motion`, and falls back to a static SVG when WebGL is unavailable.
+- **Error-rate chart.** The 60-second error rate against the learned normal band, with anomalous buckets marked.
+- **Incident feed.** One card per incident, filterable by state and severity: severity as text, the detector, the one-line summary, and under "Why it fired" the template, its normal band against the observed count, the masked first bad line, and the share of errors by service, message and source IP. Each card shows SNS and CloudWatch delivery status and has an Acknowledge button.
+- **Alert delivery.** Which SNS and CloudWatch target alerts go to, and whether the last alert got there.
+- **Demo faults.** Copyable `make` and Docker commands for the three faults the detector catches. The backend has no API to inject faults, so they are run from a terminal.
+
+Window length, bucket size and baseline warm-up are read from `/api/health`, so labels follow the backend configuration. A badge in the header says whether the detector is still learning its baseline or monitoring ("Monitoring, 21 templates"); until the baseline is learned, the dashboard says that no alerts can fire yet.
+
+If the WebSocket drops, the header shows "Reconnecting" and the dashboard retries with backoff, reloading history on every reconnect, so a refresh or a backend restart never leaves a gap. Colour is only used for severity, which is always also written as text. It works down to phone widths. Requires Node 22 or newer; see [frontend/README.md](frontend/README.md) for commands and the layout of `src/`.
 
 ## How we built this
 
