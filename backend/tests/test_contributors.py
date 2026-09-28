@@ -1,10 +1,11 @@
 import pytest
 
-from app.detection.contributors import rank, summarise, top_contributors
+from app.detection.contributors import rank, sample_lines, summarise, top_contributors
+from app.models import LogEvent
 from tests.factories import make_event
 
 
-def db_outage_errors() -> list:
+def db_outage_errors() -> list[LogEvent]:
     errors = [make_event("ERROR", "claim-adjudication", "DB connection timeout") for _ in range(47)]
     errors += [make_event("ERROR", "eligibility-check", "upstream 502") for _ in range(3)]
     return errors
@@ -93,3 +94,22 @@ def test_ip_below_the_dominance_share_falls_back_to_service_summary() -> None:
     assert summarise(errors, window_seconds=60).startswith(
         "70% of errors come from eligibility-check"
     )
+
+
+def test_sample_lines_show_the_dominant_error_first_newest_first() -> None:
+    def timeout(n: int) -> LogEvent:
+        return make_event("ERROR", "claim-adjudication", "DB connection timeout", raw=f"t{n}")
+
+    background = make_event("ERROR", "payment-gateway", "card declined", raw="declined")
+
+    lines = sample_lines([timeout(0), timeout(1), background, timeout(2)], limit=3)
+
+    assert lines == ["t2", "t1", "t0"]
+
+
+def test_sample_lines_fill_up_with_other_errors() -> None:
+    events = [make_event("ERROR", message="a"), make_event("ERROR", message="a")]
+    events.append(make_event("ERROR", message="b"))
+
+    assert len(sample_lines(events, limit=5)) == 3
+    assert sample_lines([], limit=5) == []

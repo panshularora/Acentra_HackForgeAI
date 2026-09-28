@@ -26,7 +26,7 @@ from enum import StrEnum
 
 from app.config import Settings
 from app.detection.baseline import RobustBaseline
-from app.detection.contributors import summarise, top_contributors
+from app.detection.contributors import sample_lines, summarise, top_contributors
 from app.detection.severity import SeverityThresholds, classify
 from app.detection.window import BucketAccumulator, SlidingWindow
 from app.models import Alert, LogEvent, Severity, StatsPoint
@@ -200,7 +200,7 @@ class Detector:
             updated_at=now,
             summary=summarise(errors, self.config.window_seconds),
             top_contributors=top_contributors(errors, self.config.contributor_limit),
-            sample_lines=self._sample_lines(errors),
+            sample_lines=sample_lines(errors, self.config.sample_line_limit),
         )
         return AlertEvent.snapshot(AlertChange.OPENED, self._incident)
 
@@ -225,7 +225,7 @@ class Detector:
         incident.error_rate = rate
         incident.summary = summarise(errors, self.config.window_seconds)
         incident.top_contributors = top_contributors(errors, self.config.contributor_limit)
-        incident.sample_lines = self._sample_lines(errors)
+        incident.sample_lines = sample_lines(errors, self.config.sample_line_limit)
 
     def _record_normal_bucket(self, now: datetime) -> AlertEvent | None:
         if self._incident is None:
@@ -240,7 +240,3 @@ class Detector:
         self._incident = None
         self._normal_streak = 0
         return AlertEvent.snapshot(AlertChange.RESOLVED, resolved)
-
-    def _sample_lines(self, errors: list[LogEvent]) -> list[str]:
-        """The most recent masked error lines, newest first."""
-        return [e.raw for e in reversed(errors[-self.config.sample_line_limit :])]

@@ -13,9 +13,10 @@ def make_event(
     message: str = "eligibility verified",
     source_ip: str | None = None,
     http_status: int | None = None,
+    raw: str | None = None,
 ) -> LogEvent:
     """Build a LogEvent with sensible defaults for tests."""
-    raw = f'2026-09-28T13:00:00Z {level} {service} msg="{message}"'
+    raw = raw or f'2026-09-28T13:00:00Z {level} {service} msg="{message}"'
     return LogEvent(
         ts=T0,
         level=level,
