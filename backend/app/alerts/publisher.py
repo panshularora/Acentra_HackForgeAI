@@ -8,6 +8,8 @@ Design points:
 
 * Delivery never blocks detection. Alerts go onto an asyncio queue and a
   single worker makes the boto3 calls in a thread.
+* One message per incident transition (opened, escalated, resolved), in the
+  order they happened; ``event`` in the body and attributes says which.
 * Each channel is attempted independently and its outcome (``sent`` with the
   SNS message id, or ``failed`` with the error) is recorded on the alert and
   pushed to the dashboard through ``on_delivery``.
@@ -32,6 +34,7 @@ from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 
 from app.config import Settings
+from app.detection.detector import AlertEvent
 from app.models import Alert, ChannelDelivery, Delivery
 
 if TYPE_CHECKING:
@@ -51,11 +54,12 @@ BOTO_CONFIG = Config(connect_timeout=2, read_timeout=5, retries={"max_attempts":
 EMULATOR_CREDENTIALS = {"aws_access_key_id": "testing", "aws_secret_access_key": "testing"}
 
 
-def alert_message(alert: Alert, app_name: str) -> dict[str, Any]:
+def alert_message(event: AlertEvent, app_name: str) -> dict[str, Any]:
     """The JSON document sent to SNS and CloudWatch: masked fields only."""
-    data = alert.to_dict()
+    data = event.alert.to_dict()
     return {
         "source": app_name,
+        "event": event.change.value,
         "id": data["id"],
         "status": data["status"],
         "severity": data["severity"],
@@ -89,7 +93,7 @@ class AlertPublisher:
         self.log_group = settings.cw_log_group
         self._log_stream = settings.cw_log_stream
         self._logs_ready = False
-        self._queue: asyncio.Queue[Alert] = asyncio.Queue()
+        self._queue: asyncio.Queue[AlertEvent] = asyncio.Queue()
         self._worker: asyncio.Task[None] | None = None
         kwargs = self._client_kwargs()
         self._sns: SNSClient = boto3.client("sns", **kwargs)
@@ -108,9 +112,9 @@ class AlertPublisher:
                 await self._worker
             self._worker = None
 
-    def submit(self, alert: Alert) -> None:
-        """Queue an alert for delivery; returns immediately."""
-        self._queue.put_nowait(alert)
+    def submit(self, event: AlertEvent) -> None:
+        """Queue an alert transition for delivery; returns immediately."""
+        self._queue.put_nowait(event)
 
     async def drain(self) -> None:
         """Wait until every queued alert has been delivered (used by tests)."""
@@ -121,24 +125,25 @@ class AlertPublisher:
         self._ensure_topic()
         self._ensure_log_stream()
 
-    def deliver(self, alert: Alert) -> Delivery:
-        """Send one alert to both channels synchronously and report the outcome."""
-        body = json.dumps(alert_message(alert, self.settings.app_name))
-        return Delivery(sns=self._publish_sns(alert, body), cloudwatch=self._put_log_event(body))
+    def deliver(self, event: AlertEvent) -> Delivery:
+        """Send one alert transition to both channels synchronously and report the outcome."""
+        body = json.dumps(alert_message(event, self.settings.app_name))
+        return Delivery(sns=self._publish_sns(event, body), cloudwatch=self._put_log_event(body))
 
     async def _run(self) -> None:
         while True:
-            alert = await self._queue.get()
+            event = await self._queue.get()
             try:
-                delivery = await asyncio.to_thread(self.deliver, alert)
+                delivery = await asyncio.to_thread(self.deliver, event)
                 if self.on_delivery is not None:
-                    await self.on_delivery(alert.id, delivery)
+                    await self.on_delivery(event.alert.id, delivery)
             except Exception:
-                logger.exception("delivery of alert %s failed unexpectedly", alert.id)
+                logger.exception("delivery of alert %s failed unexpectedly", event.alert.id)
             finally:
                 self._queue.task_done()
 
-    def _publish_sns(self, alert: Alert, body: str) -> ChannelDelivery:
+    def _publish_sns(self, event: AlertEvent, body: str) -> ChannelDelivery:
+        alert = event.alert
         try:
             topic_arn = self.topic_arn or self._ensure_topic()
             if topic_arn is None:
@@ -148,6 +153,7 @@ class AlertPublisher:
                 Subject=sns_subject(alert, self.settings.app_name),
                 Message=body,
                 MessageAttributes={
+                    "event": {"DataType": "String", "StringValue": event.change.value},
                     "severity": {"DataType": "String", "StringValue": alert.severity.value},
                     "status": {"DataType": "String", "StringValue": alert.status},
                 },

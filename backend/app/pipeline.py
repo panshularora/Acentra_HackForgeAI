@@ -21,7 +21,7 @@ from typing import Protocol
 
 from app.alerts.store import AlertStore, StatsHistory
 from app.api.ws import ConnectionManager
-from app.detection.detector import AlertChange, DetectionResult, Detector
+from app.detection.detector import AlertChange, AlertEvent, DetectionResult, Detector
 from app.ingest.parser import LogParser
 from app.ingest.tailer import FileTailer
 from app.models import Alert, ChannelDelivery, Delivery, DeliveryState
@@ -36,8 +36,8 @@ PUBLISHED_CHANGES = frozenset({AlertChange.OPENED, AlertChange.ESCALATED, AlertC
 class AlertSink(Protocol):
     """Something that delivers alerts outside the process (see ``alerts.publisher``)."""
 
-    def submit(self, alert: Alert) -> None:
-        """Queue an alert for delivery without blocking."""
+    def submit(self, event: AlertEvent) -> None:
+        """Queue an alert and the change that triggered it for delivery without blocking."""
 
 
 class Pipeline:
@@ -103,7 +103,7 @@ class Pipeline:
         logger.info("incident %s %s: %s %s", stored.id, change, stored.severity, stored.summary)
         await self.clients.broadcast("alert", stored.to_dict())
         if self.sink is not None and change in PUBLISHED_CHANGES:
-            self.sink.submit(stored)
+            self.sink.submit(AlertEvent(change, stored))
 
     async def _ingest_loop(self) -> None:
         async for lines in self.tailer.follow():

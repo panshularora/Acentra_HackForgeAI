@@ -1,27 +1,34 @@
 import asyncio
 import contextlib
+import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import pytest
+from moto import mock_aws
+
+from app.alerts.publisher import AlertPublisher
 from app.alerts.store import AlertStore, StatsHistory
 from app.api.ws import ConnectionManager
-from app.detection.detector import Detector, DetectorConfig
+from app.config import Settings
+from app.detection.detector import AlertEvent, Detector, DetectorConfig
 from app.ingest.parser import LogParser
 from app.ingest.tailer import FileTailer
-from app.models import Alert, ChannelDelivery, Delivery
-from app.pipeline import Pipeline
+from app.models import ChannelDelivery, Delivery
+from app.pipeline import AlertSink, Pipeline
+from tests.aws import receive_envelopes, subscribe_queue
 from tests.factories import T0, make_event
 
 
 class RecordingSink:
     def __init__(self) -> None:
-        self.submitted: list[Alert] = []
+        self.submitted: list[AlertEvent] = []
 
-    def submit(self, alert: Alert) -> None:
-        self.submitted.append(alert)
+    def submit(self, event: AlertEvent) -> None:
+        self.submitted.append(event)
 
 
-def build(tmp_path: Path, sink: RecordingSink | None) -> Pipeline:
+def build(tmp_path: Path, sink: AlertSink | None) -> Pipeline:
     return Pipeline(
         tailer=FileTailer(tmp_path / "app.log"),
         parser=LogParser(),
@@ -50,12 +57,47 @@ async def test_only_open_escalate_and_resolve_are_sent_to_aws(tmp_path: Path) ->
 
     await run_incident(pipeline)
 
-    assert [(a.status, a.severity.value) for a in sink.submitted] == [
-        ("open", "HIGH"),
-        ("open", "CRITICAL"),
-        ("resolved", "CRITICAL"),
+    assert [(e.change, e.alert.status, e.alert.severity.value) for e in sink.submitted] == [
+        ("opened", "open", "HIGH"),
+        ("escalated", "open", "CRITICAL"),
+        ("resolved", "resolved", "CRITICAL"),
     ]
-    assert len({a.id for a in sink.submitted}) == 1
+    assert len({e.alert.id for e in sink.submitted}) == 1
+
+
+async def test_incident_lifecycle_reaches_sns_as_three_messages_in_order(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for key in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"):
+        monkeypatch.setenv(key, "testing")
+    with mock_aws():
+        publisher = AlertPublisher(Settings(aws_endpoint_url=None, aws_region="us-east-1"))
+        await publisher.start()
+        assert publisher.topic_arn is not None
+        queue_url = subscribe_queue(publisher.topic_arn)
+        pipeline = build(tmp_path, publisher)
+        publisher.on_delivery = pipeline.record_delivery
+
+        await run_incident(pipeline)
+        await asyncio.wait_for(publisher.drain(), timeout=10)
+        await publisher.stop()
+        envelopes = receive_envelopes(queue_url)
+
+    attributes = [
+        {name: value["Value"] for name, value in envelope["MessageAttributes"].items()}
+        for envelope in envelopes
+    ]
+    assert attributes == [
+        {"event": "opened", "status": "open", "severity": "HIGH"},
+        {"event": "escalated", "status": "open", "severity": "CRITICAL"},
+        {"event": "resolved", "status": "resolved", "severity": "CRITICAL"},
+    ]
+    bodies = [json.loads(envelope["Message"]) for envelope in envelopes]
+    assert [body["event"] for body in bodies] == ["opened", "escalated", "resolved"]
+    assert len({body["id"] for body in bodies}) == 1
+    stored = pipeline.store.list_recent()
+    assert len(stored) == 1
+    assert stored[0].delivery.sns.message_id == envelopes[-1]["MessageId"]
 
 
 async def test_every_bucket_is_kept_in_stats_history(tmp_path: Path) -> None:

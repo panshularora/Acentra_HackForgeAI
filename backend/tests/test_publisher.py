@@ -10,8 +10,9 @@ from moto import mock_aws
 
 from app.alerts.publisher import AlertPublisher, sns_subject
 from app.config import Settings
+from app.detection.detector import AlertChange, AlertEvent
 from app.ingest.parser import LogParser
-from app.models import Delivery, Severity
+from app.models import Alert, Delivery, Severity
 from tests.aws import subscribe_queue
 from tests.factories import make_alert
 
@@ -39,7 +40,11 @@ def settings(**overrides: Any) -> Settings:
     return Settings(**values)
 
 
-def critical_alert_from_real_line() -> Any:
+def opened(alert: Alert) -> AlertEvent:
+    return AlertEvent(AlertChange.OPENED, alert)
+
+
+def critical_alert_from_real_line() -> Alert:
     event = LogParser().parse(RAW_PHI_LINE)
     assert event is not None
     return make_alert("crit01", severity=Severity.CRITICAL, sample_lines=[event.raw])
@@ -61,7 +66,7 @@ def test_critical_alert_is_readable_from_subscribed_queue_and_masked(aws: None) 
     assert publisher.topic_arn is not None
     queue_url = subscribe_queue(publisher.topic_arn)
 
-    delivery = publisher.deliver(critical_alert_from_real_line())
+    delivery = publisher.deliver(opened(critical_alert_from_real_line()))
 
     messages = boto3.client("sqs", region_name="us-east-1").receive_message(
         QueueUrl=queue_url, MaxNumberOfMessages=1
@@ -71,7 +76,9 @@ def test_critical_alert_is_readable_from_subscribed_queue_and_masked(aws: None) 
     assert delivery.sns.status == "sent"
     assert envelope["MessageId"] == delivery.sns.message_id
     assert envelope["Subject"].startswith("[CRITICAL] ClaimsWatch: ")
+    assert envelope["MessageAttributes"]["event"]["Value"] == "opened"
     assert envelope["MessageAttributes"]["severity"]["Value"] == "CRITICAL"
+    assert alert["event"] == "opened"
     assert alert["id"] == "crit01"
     assert alert["severity"] == "CRITICAL"
     assert "member_id=<MEMBER_ID>" in alert["sample_lines"][0]
@@ -83,7 +90,7 @@ def test_alert_is_written_to_cloudwatch_logs(aws: None) -> None:
     publisher = AlertPublisher(settings(cw_log_group="/test/alerts", cw_log_stream="s1"))
     publisher.ensure_resources()
 
-    delivery = publisher.deliver(critical_alert_from_real_line())
+    delivery = publisher.deliver(opened(critical_alert_from_real_line()))
 
     events = boto3.client("logs", region_name="us-east-1").get_log_events(
         logGroupName="/test/alerts", logStreamName="s1"
@@ -98,7 +105,7 @@ def test_alert_is_written_to_cloudwatch_logs(aws: None) -> None:
 def test_resources_are_created_lazily_if_startup_missed_them(aws: None) -> None:
     publisher = AlertPublisher(settings())
 
-    delivery = publisher.deliver(make_alert())
+    delivery = publisher.deliver(opened(make_alert()))
 
     assert delivery.sns.status == "sent"
     assert delivery.cloudwatch.status == "sent"
@@ -108,7 +115,7 @@ def test_unreachable_aws_marks_both_channels_failed_without_raising() -> None:
     publisher = AlertPublisher(settings(aws_endpoint_url="http://127.0.0.1:9"))
     publisher.ensure_resources()
 
-    delivery = publisher.deliver(make_alert())
+    delivery = publisher.deliver(opened(make_alert()))
 
     assert publisher.topic_arn is None
     assert delivery.sns.status == "failed" and delivery.sns.error
@@ -123,7 +130,7 @@ async def test_worker_delivers_in_background_and_reports_back(aws: None) -> None
 
     publisher = AlertPublisher(settings(), on_delivery=record)
     await publisher.start()
-    publisher.submit(make_alert("bg1"))
+    publisher.submit(opened(make_alert("bg1")))
     await asyncio.wait_for(publisher.drain(), timeout=10)
     await publisher.stop()
 
