@@ -1,0 +1,319 @@
+{
+  "title": "ClaimsWatch",
+  "repo": "github.com/panshularora/Acentra_HackForgeAI",
+  "team": [
+    "Panshul Arora",
+    "Naman Rai",
+    "Aarati Deshmukh",
+    "Aaditey Nim"
+  ],
+  "sources": [
+    "acentra.com/about-us",
+    "acentra.com/technologies/evobrix-x",
+    "aws.amazon.com/blogs/publicsector/acentra-health-processes-35m-medicare-documents-50-faster-with-idp-on-aws"
+  ],
+  "no_break": [
+    "claim-adjudication",
+    "ten-second",
+    "250 ms",
+    "10 s",
+    "60 s",
+    "last 60s"
+  ],
+  "slides": [
+    {
+      "layout": "context",
+      "kicker": "ClaimsWatch  ·  Acentra Health “Build to Care” code-a-thon  ·  28 Sep 2026",
+      "headline": "When a Medicaid eligibility service fails, a patient can be turned away at the pharmacy.",
+      "image": {
+        "path": "docs/media/dashboard-normal.png"
+      },
+      "lines": [
+        "Acentra Health formed in `2023` from the merger of CNSI and Kepro, with about `3,300` employees and an office in Chennai.",
+        "An AWS Advanced Partner, it runs evoBrix X, a cloud-based Medicaid claims platform.",
+        "ClaimsWatch watches claims-service logs and tells on-call what broke, and where, within seconds."
+      ],
+      "team_label": "Team"
+    },
+    {
+      "layout": "gap",
+      "headline": "Error-rate alerts tell the on-call engineer that something broke, but not what broke or where.",
+      "left_label": "A typical error-rate alarm",
+      "left_title": "ALARM  ErrorRate above threshold",
+      "left_big": "Error rate `{outage[peak_error_rate]}`, `{outage[ratio]}×` normal",
+      "left_note": "Which service? Which error? Which client?\nThe engineer starts digging through logs.",
+      "right_label": "The ClaimsWatch alert for the same incident",
+      "right_severity": "{outage[peak_severity]}",
+      "right_summary": "{outage[peak_summary]}",
+      "right_stats": [
+        [
+          "Peak z-score",
+          "{outage[peak_score]}"
+        ],
+        [
+          "Peak error rate",
+          "{outage[peak_error_rate]} vs {outage[baseline_median]}"
+        ]
+      ],
+      "caption": "Both built from the same replayed database outage (`make replay`, seed `{outage[seed]}`)."
+    },
+    {
+      "layout": "detection",
+      "headline": "Our detector learns normal behaviour from the log itself and flags errors that rise well above it.",
+      "image": {
+        "path": "docs/media/dashboard-db-outage.png",
+        "crop": [
+          0.01171875,
+          0.2,
+          0.3447265625,
+          0.01875
+        ],
+        "_crop_note": "left, top, right, bottom fractions: the chart panel of the 1440x900 dashboard screenshot"
+      },
+      "formula_label": "Modified z-score (Iglewicz & Hoaglin, 1993)",
+      "formula": "score = 0.6745 × (rate − median) / MAD",
+      "thresholds_label": "Severity thresholds",
+      "thresholds": [
+        [
+          "WARNING",
+          "score ≥ 3.5"
+        ],
+        [
+          "HIGH",
+          "score ≥ 5"
+        ],
+        [
+          "CRITICAL",
+          "score ≥ 8"
+        ]
+      ],
+      "lines": [
+        "Median and MAD of the last `30` window error rates, so one past spike barely moves them.",
+        "`3.5` is the published outlier cut-off; `5` and `8` are our escalation steps."
+      ]
+    },
+    {
+      "layout": "architecture",
+      "headline": "From one log line to one alert, in six stages.",
+      "stages": [
+        {
+          "title": "Tail",
+          "module": "ingest/tailer.py",
+          "detail": "Polls app.log every 250 ms; survives truncation and rotation."
+        },
+        {
+          "title": "Parse + mask",
+          "module": "ingest/parser.py",
+          "detail": "PHI is masked before any field is extracted."
+        },
+        {
+          "title": "Window",
+          "module": "detection/window.py",
+          "detail": "10 s buckets roll into a 60 s error rate."
+        },
+        {
+          "title": "Baseline",
+          "module": "detection/baseline.py",
+          "detail": "Median and MAD of the last 30 normal rates."
+        },
+        {
+          "title": "Detect",
+          "module": "detection/detector.py",
+          "detail": "Score and severity; incident opens, updates, resolves."
+        }
+      ],
+      "fanout_title": "Store and\nfan out",
+      "fanout": {
+        "store": [
+          "SQLite alert store",
+          "alerts/store.py"
+        ],
+        "ws": [
+          "WebSocket /ws",
+          "api/ws.py · api/routes.py"
+        ],
+        "publisher": [
+          "AWS publisher (background)",
+          "alerts/publisher.py"
+        ],
+        "dashboard": [
+          "React dashboard",
+          "frontend/src/App.tsx"
+        ],
+        "aws": [
+          "SNS + CloudWatch Logs",
+          "moto locally; real AWS as-is"
+        ]
+      }
+    },
+    {
+      "layout": "incident",
+      "headline": "The database outage was caught in `{outage[latency_s]}` seconds, and the alert names the failing service.",
+      "image": {
+        "path": "docs/media/dashboard-db-outage.png"
+      },
+      "big": "{outage[latency_s]}",
+      "big_unit": "seconds",
+      "big_label": "detection latency, replay of a {outage[duration_s]} s outage\n(make replay, seed {outage[seed]})",
+      "lines": [
+        "Opened [[{outage[opened_severity]}]] after `{outage[buckets]}` ten-second buckets, peaked [[{outage[peak_severity]}]] at z = `{outage[peak_score]}`.",
+        "“{outage[peak_summary]}”"
+      ],
+      "note": "Screenshot: the live stack during an injected outage (make incident-db)."
+    },
+    {
+      "layout": "incident",
+      "headline": "The same detector caught a credential-stuffing attack from `{attack[ip]}`.",
+      "image": {
+        "path": "docs/media/dashboard-cred-stuffing.png"
+      },
+      "big": "{attack[latency_s]}",
+      "big_unit": "seconds",
+      "big_label": "detection latency, replay of a {attack[duration_s]} s attack\n(make replay, seed {attack[seed]})",
+      "lines": [
+        "Opened [[{attack[opened_severity]}]] in the first bucket already naming the IP; peaked [[{attack[peak_severity]}]] at z = `{attack[peak_score]}`.",
+        "“{attack[peak_summary]}”"
+      ],
+      "note": "Screenshot: the live stack during an injected attack (make incident-auth)."
+    },
+    {
+      "layout": "masking",
+      "headline": "Patient data is masked before any alert leaves the server.",
+      "left_label": "One line from tools/loggen.py, before and after the parser",
+      "raw_label": "RAW",
+      "raw": "{masking[raw]}",
+      "masked_label": "MASKED  (ingest/masking.py)",
+      "masked": "{masking[masked]}",
+      "right_label": "The alert read back from SNS by tools/sns_tail.py",
+      "sns_label": "SNS → SQS",
+      "sns_id": "{sns[message_id]}",
+      "sns_severity": "{sns[severity]}",
+      "sns_subject_rest": "{sns[subject_rest]}",
+      "publisher_line": "{sns[publisher_line]}",
+      "sample_label": "sample_lines[0]",
+      "sample_line": "{sns[sample_line]}",
+      "lines": [
+        "Member IDs, names, dates of birth, e-mails, SSNs and phone numbers are tagged in the parser; nothing downstream sees them.",
+        "Right: the production AlertPublisher sent the replayed outage alert to moto_server; tools/sns_tail.py read it back via SNS → SQS."
+      ]
+    },
+    {
+      "layout": "results",
+      "headline": "Across `{replay[incidents]}` replayed incidents: all detected in `{replay[latency_min]}`–`{replay[latency_max]}` seconds, with `{replay[false_alarms]}` false alarms.",
+      "table": "replay_table",
+      "lines": [
+        "Every incident peaked [[{replay[all_peaked]}]]; each run replays the production parser and detector on a simulated clock.",
+        "`{tests[backend]}` backend tests (pytest) and `{tests[frontend]}` frontend tests (Vitest) pass."
+      ],
+      "repo_label": "Code, tests and docs"
+    }
+  ],
+  "facts": {
+    "outage": {
+      "latency_s": "20",
+      "buckets": "2",
+      "opened_severity": "HIGH",
+      "opened_summary": "71% of errors come from claim-adjudication: DB connection timeout",
+      "peak_severity": "CRITICAL",
+      "peak_score": "16.4",
+      "peak_error_rate": "7.1%",
+      "baseline_median": "2.2%",
+      "ratio": "3.2",
+      "peak_summary": "82% of errors come from claim-adjudication: DB connection timeout",
+      "duration_s": "45",
+      "seed": "2026"
+    },
+    "attack": {
+      "latency_s": "10",
+      "buckets": "1",
+      "opened_severity": "HIGH",
+      "opened_summary": "62 failed logins from 10.4.2.17 in the last 60s",
+      "peak_severity": "CRITICAL",
+      "peak_score": "23.1",
+      "peak_error_rate": "8.8%",
+      "baseline_median": "2.0%",
+      "ratio": "4.4",
+      "peak_summary": "179 failed logins from 10.4.2.17 in the last 60s",
+      "duration_s": "30",
+      "seed": "2026",
+      "ip": "10.4.2.17"
+    },
+    "replay": {
+      "runs": "9",
+      "incidents": "18",
+      "detected": "18",
+      "latency_min": "10",
+      "latency_max": "20",
+      "false_alarms": "0",
+      "all_peaked": "CRITICAL"
+    },
+    "replay_table": {
+      "caption": "Detection latency per replay seed (tools/replay.py --seed N, 20-minute scenario each)",
+      "header": [
+        "Seed",
+        "2026",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8"
+      ],
+      "rows": [
+        [
+          "db-outage",
+          "20 s",
+          "20 s",
+          "20 s",
+          "10 s",
+          "10 s",
+          "20 s",
+          "20 s",
+          "20 s",
+          "20 s"
+        ],
+        [
+          "cred-stuffing",
+          "10 s",
+          "10 s",
+          "10 s",
+          "10 s",
+          "10 s",
+          "10 s",
+          "10 s",
+          "10 s",
+          "10 s"
+        ],
+        [
+          "False alarms",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0"
+        ]
+      ]
+    },
+    "tests": {
+      "backend": "150",
+      "frontend": "87"
+    },
+    "masking": {
+      "raw": "2026-09-28T09:14:03.412Z ERROR member-auth msg=\"login failed: invalid credentials\" req=a6a3a450 member_id=M1810111 name=\"Aisha Brown\" plan=MEDICAID-A email=priya971@example.com ip=10.4.2.17 status=401 latency_ms=54",
+      "masked": "2026-09-28T09:14:03.412Z ERROR member-auth msg=\"login failed: invalid credentials\" req=a6a3a450 member_id=<MEMBER_ID> name=\"<NAME>\" plan=MEDICAID-A email=<EMAIL> ip=10.4.2.17 status=401 latency_ms=54"
+    },
+    "sns": {
+      "message_id": "95cf7d28-420e-40d7-9b49-89e703c1bc78",
+      "severity": "HIGH",
+      "subject_rest": "ClaimsWatch: 71% of errors come from claim-adjudication: DB connection timeout",
+      "sample_line": "2026-09-28T09:08:19.883Z ERROR claim-adjudication msg=\"DB connection timeout\" req=b80aea2a member_id=<MEMBER_ID> name=\"<NAME>\" plan=MEDICAID-B pool=claims-primary ip=10.1.78.45 status=503 latency_ms=5049",
+      "publisher_line": "sns sent, id 95cf7d28…; cloudwatch sent"
+    }
+  }
+}
