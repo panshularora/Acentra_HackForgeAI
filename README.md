@@ -12,16 +12,16 @@ Built for the Acentra Health "Build to Care" code-a-thon, problem statement PS1:
 
 ## Requirements coverage
 
-| # | Requirement | Where | How it is tested |
-| --- | --- | --- | --- |
-| 1 | Monitor a continuously growing log file | `backend/app/ingest/tailer.py`, `backend/app/pipeline.py` | `test_tailer.py`: append, partial lines, truncation, rotation, missing file; `test_api.py` writes to a real file and reads the result over the API |
-| 2 | Rolling error rate over a sliding window | `backend/app/detection/window.py` | `test_window.py`: bucket rollover, eviction, empty window |
-| 3 | Baseline for normal behaviour | `backend/app/detection/baseline.py` | `test_baseline.py`: formula, MAD floor, zero MAD, warm-up, outlier resistance |
-| 4 | Detect deviations from the baseline | `backend/app/detection/detector.py` | `test_detector.py`: spike opens one incident, guards, frozen baseline, resolution; `test_replay.py` |
-| 5 | Severity levels | `backend/app/detection/severity.py` | `test_severity.py`: every boundary; escalation in `test_detector.py` |
-| 6 | Real-time frontend over WebSockets | `backend/app/api/ws.py`, `backend/app/api/routes.py`, `frontend/` | `test_ws.py`, WebSocket tests in `test_api.py`; frontend Vitest suite |
-| 7 | Display alerts as they are generated | `frontend/src/components/AlertFeed.tsx`, `AlertCard.tsx` | `AlertFeed.test.tsx`, `AlertCard.test.tsx`; live demo |
-| 8 | Push alerts to CloudWatch Logs or SNS | `backend/app/alerts/publisher.py` | `test_publisher.py` (moto): SNS -> SQS read-back with PHI check, CloudWatch read-back, failure handling |
+| #   | Requirement                              | Where                                                             | How it is tested                                                                                                                                   |
+| --- | ---------------------------------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Monitor a continuously growing log file  | `backend/app/ingest/tailer.py`, `backend/app/pipeline.py`         | `test_tailer.py`: append, partial lines, truncation, rotation, missing file; `test_api.py` writes to a real file and reads the result over the API |
+| 2   | Rolling error rate over a sliding window | `backend/app/detection/window.py`                                 | `test_window.py`: bucket rollover, eviction, empty window                                                                                          |
+| 3   | Baseline for normal behaviour            | `backend/app/detection/baseline.py`                               | `test_baseline.py`: formula, MAD floor, zero MAD, warm-up, outlier resistance                                                                      |
+| 4   | Detect deviations from the baseline      | `backend/app/detection/detector.py`                               | `test_detector.py`: spike opens one incident, guards, frozen baseline, resolution; `test_replay.py`                                                |
+| 5   | Severity levels                          | `backend/app/detection/severity.py`                               | `test_severity.py`: every boundary; escalation in `test_detector.py`                                                                               |
+| 6   | Real-time frontend over WebSockets       | `backend/app/api/ws.py`, `backend/app/api/routes.py`, `frontend/` | `test_ws.py`, WebSocket tests in `test_api.py`; frontend Vitest suite                                                                              |
+| 7   | Display alerts as they are generated     | `frontend/src/components/AlertFeed.tsx`, `AlertCard.tsx`          | `AlertFeed.test.tsx`, `AlertCard.test.tsx`; live demo                                                                                              |
+| 8   | Push alerts to CloudWatch Logs or SNS    | `backend/app/alerts/publisher.py`                                 | `test_publisher.py` (moto): SNS -> SQS read-back with PHI check, CloudWatch read-back, failure handling                                            |
 
 Beyond the minimum: PHI masking (`ingest/masking.py`), top-contributor attribution with a one-line summary (`detection/contributors.py`), incident lifecycle with acknowledgement, per-channel delivery status on every alert, and a deterministic replay benchmark (`tools/replay.py`).
 
@@ -57,6 +57,7 @@ The backend is one FastAPI process. The detector is pure Python with no I/O, so 
    ```
 
    Median and MAD are used instead of mean and standard deviation because one past spike barely moves them. The MAD floor stops a very steady service from turning tiny wobbles into huge scores.
+
 4. **Severity.** WARNING at 3.5 (the published outlier cut-off), HIGH at 5 and CRITICAL at 8 (our escalation choices). All thresholds are configurable.
 5. **Minimum-count guard.** No alert unless the window has at least 5 errors and 50 lines; 3 errors out of 5 lines is 60% but means nothing.
 6. **Incidents.** The first anomalous bucket opens an incident. Later anomalous buckets update it, and a higher severity escalates it. Three consecutive normal buckets resolve it. While an incident is open the baseline is frozen, so an outage never becomes the new normal.
@@ -118,10 +119,10 @@ The backend suite has one test file per module, including moto-backed AWS delive
 
 ## Test results
 
-| Suite | Result |
-| --- | --- |
-| Backend (`make check`) | 150 tests passing; ruff and mypy `--strict` clean |
-| Frontend (`npm test`, Node 22) | 87 tests passing; ESLint, `tsc`, Prettier and production build clean |
+| Suite                                | Result                                                                                         |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| Backend (`make check`)               | 150 tests passing; ruff and mypy `--strict` clean                                              |
+| Frontend (`npm test`, Node 22)       | 87 tests passing; ESLint, `tsc`, Prettier and production build clean                           |
 | Replay (`make replay`, 48,363 lines) | DB outage detected in 20 s (2 buckets), credential stuffing in 10 s (1 bucket), 0 false alarms |
 
 ## Project structure
@@ -154,30 +155,30 @@ docker-compose.yml       moto + backend + loggen + dashboard
 
 All settings live in `backend/app/config.py` and can be overridden with environment variables or a `.env` file (see `.env.example`).
 
-| Variable | Default | Meaning |
-| --- | --- | --- |
-| `LOG_PATH` | `logs/app.log` | Log file to follow |
-| `TAIL_FROM_START` | `false` | Read existing content instead of starting at the end |
-| `DB_PATH` | `claimswatch.db` | SQLite file for alert history |
-| `WINDOW_SECONDS` | `60` | Sliding window length |
-| `BUCKET_SECONDS` | `10` | Bucket size; one stats point per bucket |
-| `BASELINE_BUCKETS` | `30` | Window rates kept in the baseline |
-| `BASELINE_MIN_BUCKETS` | `6` | Samples needed before scoring starts |
-| `MIN_ERRORS` | `5` | Minimum errors in the window before alerting |
-| `MIN_TOTAL` | `50` | Minimum lines in the window before alerting |
-| `MAD_FLOOR` | `0.002` | Lower bound on MAD |
-| `THRESHOLD_WARNING` / `_HIGH` / `_CRITICAL` | `3.5` / `5` / `8` | Modified z-score thresholds |
-| `RESOLVE_AFTER_BUCKETS` | `3` | Consecutive normal buckets to resolve an incident |
-| `AWS_ENABLED` | `true` | Turn AWS delivery on or off |
-| `AWS_ENDPOINT_URL` | unset | Emulator endpoint, e.g. `http://localhost:5000`; unset for real AWS |
-| `AWS_REGION` | `us-east-1` | AWS region |
-| `SNS_TOPIC_NAME` | `claimswatch-alerts` | SNS topic (created if missing) |
-| `CW_LOG_GROUP` / `CW_LOG_STREAM` | `/claimswatch/alerts` / `anomalies` | CloudWatch Logs destination |
-| `APP_NAME` | `ClaimsWatch` | Name shown in the API and alerts |
+| Variable                                    | Default                             | Meaning                                                             |
+| ------------------------------------------- | ----------------------------------- | ------------------------------------------------------------------- |
+| `LOG_PATH`                                  | `logs/app.log`                      | Log file to follow                                                  |
+| `TAIL_FROM_START`                           | `false`                             | Read existing content instead of starting at the end                |
+| `DB_PATH`                                   | `claimswatch.db`                    | SQLite file for alert history                                       |
+| `WINDOW_SECONDS`                            | `60`                                | Sliding window length                                               |
+| `BUCKET_SECONDS`                            | `10`                                | Bucket size; one stats point per bucket                             |
+| `BASELINE_BUCKETS`                          | `30`                                | Window rates kept in the baseline                                   |
+| `BASELINE_MIN_BUCKETS`                      | `6`                                 | Samples needed before scoring starts                                |
+| `MIN_ERRORS`                                | `5`                                 | Minimum errors in the window before alerting                        |
+| `MIN_TOTAL`                                 | `50`                                | Minimum lines in the window before alerting                         |
+| `MAD_FLOOR`                                 | `0.002`                             | Lower bound on MAD                                                  |
+| `THRESHOLD_WARNING` / `_HIGH` / `_CRITICAL` | `3.5` / `5` / `8`                   | Modified z-score thresholds                                         |
+| `RESOLVE_AFTER_BUCKETS`                     | `3`                                 | Consecutive normal buckets to resolve an incident                   |
+| `AWS_ENABLED`                               | `true`                              | Turn AWS delivery on or off                                         |
+| `AWS_ENDPOINT_URL`                          | unset                               | Emulator endpoint, e.g. `http://localhost:5000`; unset for real AWS |
+| `AWS_REGION`                                | `us-east-1`                         | AWS region                                                          |
+| `SNS_TOPIC_NAME`                            | `claimswatch-alerts`                | SNS topic (created if missing)                                      |
+| `CW_LOG_GROUP` / `CW_LOG_STREAM`            | `/claimswatch/alerts` / `anomalies` | CloudWatch Logs destination                                         |
+| `APP_NAME`                                  | `ClaimsWatch`                       | Name shown in the API and alerts                                    |
 
 ## Frontend
 
-The dashboard (`frontend/`, React + TypeScript) keeps one WebSocket open to `/ws`. It plots the 60-second error rate against the learned normal band and shows each incident as a card: a text severity label, a one-line summary of what broke and where, the top services, messages and source IPs, masked sample log lines, SNS and CloudWatch delivery status with the SNS message ID, and an Acknowledge button. If the connection drops, a banner says the data is stale and the dashboard reconnects with backoff, reloading history each time, so a refresh or a backend restart never leaves a gap. Colour is used only for severity, which is always also written as text.
+The dashboard (`frontend/`, React + TypeScript) keeps one WebSocket open to `/ws`. It plots the 60-second error rate against the learned normal band and shows each incident as a card: a text severity label, the detector that fired, a one-line summary of what broke and where, the log template with its normal band against the observed value and the top extracted parameters, the top services, messages and source IPs, the masked first bad line and sample log lines, SNS and CloudWatch delivery status with the SNS message ID, and an Acknowledge button. If the connection drops, a banner says the data is stale and the dashboard reconnects with backoff, reloading history each time, so a refresh or a backend restart never leaves a gap. Colour is used only for severity, which is always also written as text.
 
 Window length, bucket size and baseline warm-up are read from `/api/health`, so the labels follow the backend configuration. The frontend requires Node 22 or newer; see [frontend/README.md](frontend/README.md) for commands and structure.
 
