@@ -5,13 +5,13 @@ import { StatusBar } from './components/StatusBar';
 import { SummaryStrip } from './components/SummaryStrip';
 import { useAlertStream } from './hooks/useAlertStream';
 import { useNow } from './hooks/useNow';
-import { baselineState, detectorTiming, windowBuckets } from './lib/detector';
+import { currentBaselineState, detectorTiming } from './lib/detector';
 
 export function App() {
   const stream = useAlertStream();
   const now = useNow();
   const timing = detectorTiming(stream.health);
-  const baseline = baselineState(stream.stats, timing.baseline_min_buckets, windowBuckets(timing));
+  const baseline = currentBaselineState(stream.stats, stream.health);
   const latest = stream.stats[stream.stats.length - 1];
 
   return (
@@ -43,6 +43,7 @@ export function App() {
             alerts={stream.alerts}
             liveArrivals={stream.liveArrivals}
             connection={stream.connection}
+            baseline={baseline}
             now={now}
             onAcknowledge={stream.acknowledge}
           />

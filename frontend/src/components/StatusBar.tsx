@@ -1,8 +1,9 @@
 import type { ConnectionState } from '../hooks/alertStreamReducer';
-import { describeBaseline, detectorTiming, type BaselineState } from '../lib/detector';
+import { detectorTiming, type BaselineState } from '../lib/detector';
 import { arnResourceName, formatClock, timeZoneLabel } from '../lib/format';
 import { APP_NAME } from '../theme';
 import type { Health } from '../types';
+import { LearningBadge } from './LearningBadge';
 
 const CONNECTION_LABEL: Record<ConnectionState, string> = {
   connecting: 'Connecting',
@@ -41,12 +42,7 @@ export function StatusBar({ connection, baseline, health, now }: StatusBarProps)
           <span className="connection__dot" aria-hidden="true" />
           {CONNECTION_TEXT[connection]}
         </span>
-        <span
-          className={`status-bar__baseline status-bar__baseline--${baseline.kind}`}
-          aria-label="Baseline status"
-        >
-          {describeBaseline(baseline, detectorTiming(health).window_seconds)}
-        </span>
+        <LearningBadge state={baseline} windowSeconds={detectorTiming(health).window_seconds} />
       </div>
 
       <dl className="status-bar__meta">

@@ -37,3 +37,31 @@ describe('StatusBar', () => {
     expect(screen.getByText('/claimswatch/alerts')).toBeInTheDocument();
   });
 });
+
+describe('StatusBar learning badge', () => {
+  it('shows monitoring and the template count from the backend', () => {
+    render(
+      <StatusBar
+        connection="live"
+        baseline={{ kind: 'ready', templates: 38 }}
+        health={health}
+        now={0}
+      />,
+    );
+    expect(screen.getByText('Monitoring, 38 templates')).toHaveClass('learning-badge');
+  });
+
+  it('labels the first-window phase with the window length from /api/health', () => {
+    render(
+      <StatusBar
+        connection="live"
+        baseline={{ kind: 'filling', collected: 1, required: 6 }}
+        health={makeHealth({
+          detector: { window_seconds: 120, bucket_seconds: 20, baseline_min_buckets: 4 },
+        })}
+        now={0}
+      />,
+    );
+    expect(screen.getByText(/Filling first 120s window, 1 of 6 buckets/)).toBeInTheDocument();
+  });
+});

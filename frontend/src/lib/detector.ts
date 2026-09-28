@@ -1,4 +1,4 @@
-import type { DetectorKind, DetectorTiming, Health, StatsPoint } from '../types';
+import type { DetectorKind, DetectorTiming, Health, LearningState, StatsPoint } from '../types';
 
 /**
  * Fallback used until /api/health answers. Matches the backend defaults in
@@ -24,10 +24,13 @@ export type BaselineState =
   | { kind: 'waiting' }
   | { kind: 'filling'; collected: number; required: number }
   | { kind: 'learning'; collected: number; required: number }
-  | { kind: 'ready' };
+  /** `templates` is the distinct log templates seen, when the backend reports it. */
+  | { kind: 'ready'; templates?: number };
 
 /**
- * Whether the baseline is trusted yet, judged from the newest bucket.
+ * Whether the baseline is trusted yet, estimated from the newest buckets.
+ * This is the fallback for backends that do not report `learning`; see
+ * currentBaselineState.
  *
  * The backend only feeds the baseline once the sliding window is full, so a
  * cold start has two phases: filling the first window (`windowBucketCount`
@@ -54,6 +57,34 @@ export function baselineState(
   return { kind: 'learning', collected, required };
 }
 
+/** Maps the backend's contract v2 learning object onto the dashboard's baseline states. */
+export function baselineFromLearning(learning: LearningState): BaselineState {
+  if (learning.state === 'ready') return { kind: 'ready', templates: learning.templates };
+  const required = Math.max(0, learning.buckets_needed);
+  return {
+    kind: 'learning',
+    collected: Math.min(Math.max(0, learning.buckets_seen), required),
+    required,
+  };
+}
+
+/**
+ * The detector's warm-up state as the backend reports it: the newest stats
+ * bucket's `learning`, else the one /api/health returned on load. Backends
+ * without `learning` fall back to estimating it from the buckets, using the
+ * timing from /api/health.
+ */
+export function currentBaselineState(
+  stats: readonly StatsPoint[],
+  health: Health | null,
+): BaselineState {
+  const learning =
+    stats[stats.length - 1]?.learning ?? (stats.length === 0 ? health?.learning : null);
+  if (learning) return baselineFromLearning(learning);
+  const timing = detectorTiming(health);
+  return baselineState(stats, timing.baseline_min_buckets, windowBuckets(timing));
+}
+
 export function describeBaseline(
   state: BaselineState,
   windowSeconds: number = DEFAULT_DETECTOR_TIMING.window_seconds,
@@ -66,7 +97,8 @@ export function describeBaseline(
     case 'learning':
       return `Learning baseline, ${state.collected} of ${state.required} buckets`;
     case 'ready':
-      return 'Baseline ready';
+      if (state.templates == null) return 'Monitoring';
+      return `Monitoring, ${state.templates} ${state.templates === 1 ? 'template' : 'templates'}`;
   }
 }
 

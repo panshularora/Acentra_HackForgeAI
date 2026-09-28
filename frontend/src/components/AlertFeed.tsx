@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { ConnectionState } from '../hooks/alertStreamReducer';
+import type { BaselineState } from '../lib/detector';
 import { SEVERITIES, SEVERITY_LABEL } from '../lib/severity';
 import type { Alert, Severity } from '../types';
 import { AlertCard } from './AlertCard';
@@ -53,6 +54,8 @@ interface AlertFeedProps {
   alerts: Alert[];
   liveArrivals: Record<string, number>;
   connection: ConnectionState;
+  /** Detector warm-up; nothing can alert until the baseline is learned. */
+  baseline?: BaselineState;
   now: number;
   onAcknowledge: (id: string) => Promise<void>;
 }
@@ -61,6 +64,7 @@ export function AlertFeed({
   alerts,
   liveArrivals,
   connection,
+  baseline = { kind: 'ready' },
   now,
   onAcknowledge,
 }: AlertFeedProps) {
@@ -75,10 +79,13 @@ export function AlertFeed({
 
   let emptyMessage: string;
   if (alerts.length === 0) {
-    emptyMessage =
-      connection === 'live'
-        ? 'No alerts yet. Incidents appear here the moment the detector opens them.'
-        : 'Alerts will load once the live stream is connected.';
+    if (connection !== 'live') {
+      emptyMessage = 'Alerts will load once the live stream is connected.';
+    } else if (baseline.kind !== 'ready') {
+      emptyMessage = 'No alerts yet. Alerting starts once the detector has learned its baseline.';
+    } else {
+      emptyMessage = 'No alerts yet. Incidents appear here as soon as the detector opens them.';
+    }
   } else {
     emptyMessage = 'No alerts match these filters.';
   }
