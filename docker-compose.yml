@@ -6,6 +6,9 @@
 # Inject incidents into the running log generator:
 #   docker compose exec loggen python tools/loggen.py --incident db-outage --duration 45
 #   docker compose exec loggen python tools/loggen.py --incident cred-stuffing --duration 30
+#   docker compose exec loggen python tools/loggen.py --incident new-error --duration 45
+#   docker compose exec loggen python tools/loggen.py --incident heartbeat-stop --duration 60
+#   docker compose exec loggen python tools/loggen.py --incident flow-break --duration 60
 #
 # Read alerts back from SNS:
 #   docker compose exec backend python tools/sns_tail.py

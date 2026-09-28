@@ -85,6 +85,9 @@ Open http://localhost:5173 (dashboard) or http://localhost:8000/docs (API). Wait
 ```bash
 docker compose exec loggen python tools/loggen.py --incident db-outage --duration 45
 docker compose exec loggen python tools/loggen.py --incident cred-stuffing --duration 30
+docker compose exec loggen python tools/loggen.py --incident new-error --duration 45
+docker compose exec loggen python tools/loggen.py --incident heartbeat-stop --duration 60
+docker compose exec loggen python tools/loggen.py --incident flow-break --duration 60
 docker compose exec backend python tools/sns_tail.py      # alerts as SNS delivers them
 ```
 
@@ -101,6 +104,20 @@ cd frontend && npm install && npm run dev            # terminal 4: dashboard on 
 ```
 
 Then `make incident-db`, `make incident-auth`, `make sns-tail` and `make feed` (the WebSocket feed in a terminal).
+
+### Log generator and faults
+
+`tools/loggen.py` writes traffic from five claims services with a slightly drifting 2% background error rate, plus two steady signals: `heartbeat service=<name> ok` from `eligibility-sync` and `payment-reconciler` every 5 s, and a claim flow where `claim validated claim_id=<id>` is followed 0.3 to 3 s later by `claim adjudicated claim_id=<id>` for 98% of claims. Member IDs and names are random and masked by the parser like every other line. Five faults can be injected live or in a seeded offline simulation (`loggen.simulate`):
+
+| Fault | Make target | What happens |
+| --- | --- | --- |
+| `db-outage` | `make incident-db` | claim-adjudication times out on its database (3 errors/s) |
+| `cred-stuffing` | `make incident-auth` | one IP sends failed logins to member-auth (6 errors/s) |
+| `new-error` | `make incident-new` | a never-seen `TLS certificate verification failed for payer gateway` error (0.5/s) |
+| `heartbeat-stop` | `make incident-silence` | eligibility-sync stops sending heartbeats |
+| `flow-break` | `make incident-flow` | validated claims stop being adjudicated |
+
+The first three append their own lines. `heartbeat-stop` and `flow-break` remove lines, so they need `make loggen` running: the incident command records the fault in `logs/app.log.faults.json` until it ends, and the generator drops the affected lines meanwhile.
 
 ## Demo
 
@@ -142,7 +159,7 @@ backend/
   Dockerfile
 frontend/                React + TypeScript dashboard (see frontend/README.md)
 tools/
-  loggen.py              realistic claims-platform logs with injectable incidents
+  loggen.py              claims-platform logs, heartbeats and claim flows with five injectable faults
   replay.py              deterministic detection benchmark
   sns_tail.py            read alerts back from SNS through an SQS subscription
   watch_feed.py          print the WebSocket feed in a terminal
