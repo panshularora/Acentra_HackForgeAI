@@ -21,6 +21,7 @@ import { SeverityBadge } from './SeverityBadge';
 
 const VISIBLE_WINDOW_MS = 10 * 60 * 1000;
 const TICK_INTERVAL_MS = 60 * 1000;
+const TICK_EDGE_GAP_MS = 20 * 1000;
 
 interface ChartDatum {
   t: number;
@@ -73,15 +74,11 @@ function anomalySpans(data: ChartDatum[]): AnomalySpan[] {
   return spans;
 }
 
+/** Whole-minute ticks, skipping any so close to the left edge that it would collide with 0%. */
 function minuteTicks(start: number, end: number): number[] {
   const ticks: number[] = [];
-  for (
-    let t = Math.ceil(start / TICK_INTERVAL_MS) * TICK_INTERVAL_MS;
-    t <= end;
-    t += TICK_INTERVAL_MS
-  ) {
-    ticks.push(t);
-  }
+  const first = Math.ceil((start + TICK_EDGE_GAP_MS) / TICK_INTERVAL_MS) * TICK_INTERVAL_MS;
+  for (let t = first; t <= end; t += TICK_INTERVAL_MS) ticks.push(t);
   return ticks;
 }
 
@@ -198,7 +195,7 @@ export function ErrorRateChart({ stats, baseline, connection }: ErrorRateChartPr
               </p>
             )}
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={data} margin={{ top: 12, right: 16, bottom: 4, left: 4 }}>
+              <ComposedChart data={data} margin={{ top: 12, right: 24, bottom: 4, left: 4 }}>
                 <CartesianGrid stroke={COLOR.grid} vertical={false} />
                 <XAxis
                   dataKey="t"
