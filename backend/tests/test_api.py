@@ -89,6 +89,10 @@ def test_health_reports_pipeline_state(client: TestClient, log_path: Path) -> No
     assert body["pipeline"]["parsed_lines"] == 5
 
 
+def test_liveness_probe(client: TestClient) -> None:
+    assert client.get("/health").json() == {"status": "ok"}
+
+
 def test_stats_endpoint_returns_closed_buckets(client: TestClient, log_path: Path) -> None:
     write_lines(client, log_path, total=50, errors=1)
     close_buckets(client, 2)
