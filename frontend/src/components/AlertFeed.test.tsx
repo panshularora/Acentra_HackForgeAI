@@ -58,6 +58,22 @@ describe('AlertFeed', () => {
     expect(screen.getByText(/No alerts yet/)).toBeInTheDocument();
   });
 
+  it('does not promise alerts while the detector is still learning', () => {
+    renderFeed({ alerts: [], baseline: { kind: 'learning', collected: 4, required: 6 } });
+    expect(
+      screen.getByText(
+        'No alerts yet. Alerting starts once the detector has learned its baseline.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('asks for a connection before showing alerts', () => {
+    renderFeed({ alerts: [], connection: 'reconnecting' });
+    expect(
+      screen.getByText('Alerts will load once the live stream is connected.'),
+    ).toBeInTheDocument();
+  });
+
   it('animates only alerts that just arrived on the live socket', () => {
     renderFeed({ liveArrivals: { c1: NOW - 1_000, w1: NOW - 60_000 } });
     const [fresh, old] = screen.getAllByRole('article');
