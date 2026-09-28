@@ -54,6 +54,22 @@ def summarise(events: Sequence[LogEvent], window_seconds: int) -> str:
     return f"{service_share:.0%} of errors come from {service}: {message}"
 
 
+def sample_lines(events: Sequence[LogEvent], limit: int) -> list[str]:
+    """Up to ``limit`` masked lines, newest first, showing the dominant error first.
+
+    Lines carrying the most common message come before background errors, so
+    the examples on an alert illustrate its summary rather than whatever
+    happened to fail last.
+    """
+    if not events or limit <= 0:
+        return []
+    top_message, _ = _most_common_with_share(e.message for e in events)
+    newest_first = list(reversed(events))
+    typical = [e.raw for e in newest_first if e.message == top_message]
+    others = [e.raw for e in newest_first if e.message != top_message]
+    return (typical + others)[:limit]
+
+
 def _summarise_dominant_ip(events: Sequence[LogEvent], window_seconds: int) -> str | None:
     """Describe the incident by source IP if a single address dominates the errors."""
     ips = [e.source_ip for e in events if e.source_ip]
