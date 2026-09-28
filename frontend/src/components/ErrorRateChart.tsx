@@ -54,7 +54,7 @@ function toDatum(point: StatsPoint): ChartDatum {
   const { baseline_median: median, band_upper: upper } = point;
   return {
     t: Date.parse(point.ts),
-    rate: point.total > 0 ? point.error_rate : null,
+    rate: point.error_rate,
     band: median !== null && upper !== null ? [median, upper] : null,
     median,
     point,

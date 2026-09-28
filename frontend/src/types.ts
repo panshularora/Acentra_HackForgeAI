@@ -13,13 +13,13 @@ export interface StatsPoint {
   total: number;
   /** Error lines in the sliding window. */
   errors: number;
-  /** errors / total over the window, 0..1. */
-  error_rate: number;
+  /** errors / total over the window, 0..1; null when the window held no lines. */
+  error_rate: number | null;
   /** Rolling median of error_rate; null until the baseline is warm. */
   baseline_median: number | null;
   /** Upper edge of "normal" (median + 3.5 · MAD / 0.6745); null until warm. */
   band_upper: number | null;
-  /** Modified z-score of this bucket; null until warm. */
+  /** Modified z-score of this bucket; null until warm or when the window is empty. */
   score: number | null;
   severity: Severity | null;
 }
