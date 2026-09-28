@@ -3,6 +3,7 @@ import contextlib
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 from moto import mock_aws
@@ -124,12 +125,35 @@ async def test_recorded_delivery_survives_later_detection_updates(tmp_path: Path
     alert_id = pipeline.store.list_recent()[0].id
 
     await pipeline.record_delivery(alert_id, Delivery(sns=ChannelDelivery("sent", "m-1")))
+    await feed(pipeline, 13, 300, 6)
+
+    stored = pipeline.store.get(alert_id)
+    assert stored is not None
+    assert stored.updated_at == T0 + timedelta(seconds=140)
+    assert stored.delivery.sns.message_id == "m-1"
+
+
+async def test_escalation_marks_the_new_delivery_pending(tmp_path: Path) -> None:
+    pipeline = build(tmp_path, RecordingSink())
+    for bucket, errors in enumerate([6] * 12 + [36]):
+        await feed(pipeline, bucket, 300, errors)
+    alert_id = pipeline.store.list_recent()[0].id
+    failed = ChannelDelivery("failed", error="timeout")
+    await pipeline.record_delivery(alert_id, Delivery(ChannelDelivery("sent", "m-1"), failed))
+    broadcasts: list[dict[str, Any]] = []
+
+    async def record(message_type: str, data: dict[str, Any]) -> None:
+        if message_type == "alert":
+            broadcasts.append(data)
+
+    pipeline.clients.broadcast = record  # type: ignore[method-assign]
     await feed(pipeline, 13, 300, 90)
 
     stored = pipeline.store.get(alert_id)
     assert stored is not None
     assert stored.severity.value == "CRITICAL"
-    assert stored.delivery.sns.message_id == "m-1"
+    assert stored.delivery == Delivery()
+    assert [b["delivery"] for b in broadcasts] == [Delivery().to_dict()]
 
 
 class EarlyWakingClock:

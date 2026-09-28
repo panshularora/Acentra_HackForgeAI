@@ -12,7 +12,9 @@ Design points:
   order they happened; ``event`` in the body and attributes says which.
 * Each channel is attempted independently and its outcome (``sent`` with the
   SNS message id, or ``failed`` with the error) is recorded on the alert and
-  pushed to the dashboard through ``on_delivery``.
+  pushed to the dashboard through ``on_delivery``. An outcome is not reported
+  if a later transition of the same alert has been queued since, so a slow
+  delivery cannot overwrite the newer one's pending status.
 * The topic, log group and log stream are created idempotently on startup,
   and again lazily if AWS was unreachable at startup (an emulator forgets its
   state when restarted).
@@ -94,6 +96,7 @@ class AlertPublisher:
         self._log_stream = settings.cw_log_stream
         self._logs_ready = False
         self._queue: asyncio.Queue[AlertEvent] = asyncio.Queue()
+        self._latest: dict[str, AlertEvent] = {}
         self._worker: asyncio.Task[None] | None = None
         kwargs = self._client_kwargs()
         self._sns: SNSClient = boto3.client("sns", **kwargs)
@@ -114,6 +117,7 @@ class AlertPublisher:
 
     def submit(self, event: AlertEvent) -> None:
         """Queue an alert transition for delivery; returns immediately."""
+        self._latest[event.alert.id] = event
         self._queue.put_nowait(event)
 
     async def drain(self) -> None:
@@ -135,8 +139,10 @@ class AlertPublisher:
             event = await self._queue.get()
             try:
                 delivery = await asyncio.to_thread(self.deliver, event)
-                if self.on_delivery is not None:
-                    await self.on_delivery(event.alert.id, delivery)
+                if self._latest.get(event.alert.id) is event:
+                    del self._latest[event.alert.id]
+                    if self.on_delivery is not None:
+                        await self.on_delivery(event.alert.id, delivery)
             except Exception:
                 logger.exception("delivery of alert %s failed unexpectedly", event.alert.id)
             finally:

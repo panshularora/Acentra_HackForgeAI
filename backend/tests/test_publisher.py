@@ -13,7 +13,7 @@ from app.config import Settings
 from app.detection.detector import AlertChange, AlertEvent
 from app.ingest.parser import LogParser
 from app.models import Alert, Delivery, Severity
-from tests.aws import subscribe_queue
+from tests.aws import receive_envelopes, subscribe_queue
 from tests.factories import make_alert
 
 RAW_PHI_LINE = (
@@ -137,6 +137,28 @@ async def test_worker_delivers_in_background_and_reports_back(aws: None) -> None
     assert [alert_id for alert_id, _ in received] == ["bg1"]
     assert received[0][1].sns.status == "sent"
     assert received[0][1].sns.message_id
+
+
+async def test_outcome_superseded_by_a_newer_transition_is_not_reported(aws: None) -> None:
+    received: list[tuple[str, Delivery]] = []
+
+    async def record(alert_id: str, delivery: Delivery) -> None:
+        received.append((alert_id, delivery))
+
+    publisher = AlertPublisher(settings(), on_delivery=record)
+    publisher.ensure_resources()
+    assert publisher.topic_arn is not None
+    queue_url = subscribe_queue(publisher.topic_arn)
+    publisher.submit(opened(make_alert("a1", severity=Severity.HIGH)))
+    publisher.submit(AlertEvent(AlertChange.ESCALATED, make_alert("a1")))
+    await publisher.start()
+    await asyncio.wait_for(publisher.drain(), timeout=10)
+    await publisher.stop()
+
+    envelopes = receive_envelopes(queue_url)
+    assert [json.loads(e["Message"])["event"] for e in envelopes] == ["opened", "escalated"]
+    assert [alert_id for alert_id, _ in received] == ["a1"]
+    assert received[0][1].sns.message_id == envelopes[-1]["MessageId"]
 
 
 def test_subject_fits_sns_limit_and_marks_resolution() -> None:

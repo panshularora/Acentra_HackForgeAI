@@ -99,7 +99,7 @@ class Pipeline:
     async def _handle_alert(self, change: AlertChange, alert: Alert) -> None:
         initial: DeliveryState = "pending" if self.sink else "disabled"
         alert.delivery = Delivery(sns=ChannelDelivery(initial), cloudwatch=ChannelDelivery(initial))
-        stored = self.store.save_detection(alert)
+        stored = self.store.save_detection(alert, reset_delivery=change in PUBLISHED_CHANGES)
         logger.info("incident %s %s: %s %s", stored.id, change, stored.severity, stored.summary)
         await self.clients.broadcast("alert", stored.to_dict())
         if self.sink is not None and change in PUBLISHED_CHANGES:

@@ -6,7 +6,8 @@ no infrastructure. Stats points are cheap to regenerate and only needed for
 the chart, so they live in a bounded in-memory ring.
 
 Detection and delivery update different columns. :meth:`AlertStore.save_detection`
-never touches ``acknowledged`` or ``delivery``, so a detector update cannot
+never touches ``acknowledged``, and only touches ``delivery`` when asked to
+because a new delivery was just queued, so a routine detector update cannot
 undo an operator's acknowledgement or an SNS message id recorded moments ago.
 """
 
@@ -66,12 +67,17 @@ class AlertStore:
         self._db.row_factory = sqlite3.Row
         self._db.executescript(_SCHEMA)
 
-    def save_detection(self, alert: Alert) -> Alert:
-        """Insert a new alert or update its detection fields; return the stored version."""
+    def save_detection(self, alert: Alert, *, reset_delivery: bool = False) -> Alert:
+        """Insert a new alert or update its detection fields; return the stored version.
+
+        With ``reset_delivery`` the alert's delivery state replaces the stored one,
+        so a newly queued delivery shows as pending instead of the last "sent".
+        """
         row = _to_row(alert)
         columns = ", ".join(row)
         placeholders = ", ".join(f":{name}" for name in row)
-        updates = ", ".join(f"{name} = excluded.{name}" for name in _DETECTION_COLUMNS)
+        updated = (*_DETECTION_COLUMNS, "delivery") if reset_delivery else _DETECTION_COLUMNS
+        updates = ", ".join(f"{name} = excluded.{name}" for name in updated)
         with self._db:
             self._db.execute(
                 f"INSERT INTO alerts ({columns}) VALUES ({placeholders}) "
