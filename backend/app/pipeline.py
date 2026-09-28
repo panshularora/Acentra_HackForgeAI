@@ -15,6 +15,7 @@ background, so a slow or unreachable AWS endpoint never delays detection.
 import asyncio
 import logging
 import time
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Protocol
 
@@ -52,6 +53,8 @@ class Pipeline:
         stats: StatsHistory,
         clients: ConnectionManager,
         sink: AlertSink | None = None,
+        clock: Callable[[], float] = time.time,
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     ) -> None:
         self.tailer = tailer
         self.parser = parser
@@ -61,6 +64,9 @@ class Pipeline:
         self.clients = clients
         self.sink = sink
         self._bucket_seconds = detector.config.bucket_seconds
+        self._clock = clock
+        self._sleep = sleep
+        self._last_boundary: float | None = None
 
     async def run(self) -> None:
         """Run until cancelled."""
@@ -108,11 +114,32 @@ class Pipeline:
 
     async def _clock_loop(self) -> None:
         while True:
-            now = time.time()
-            boundary = (now // self._bucket_seconds + 1) * self._bucket_seconds
-            await asyncio.sleep(boundary - now)
+            boundary = self._next_boundary()
+            await self._sleep_until(boundary)
+            self._last_boundary = boundary
             try:
                 await self.close_bucket(datetime.fromtimestamp(boundary, UTC))
             except Exception:
                 # One bad bucket must not stop monitoring; log it and carry on.
                 logger.exception("failed to close bucket")
+
+    def _next_boundary(self) -> float:
+        """The next bucket edge after now, and never one that was already closed.
+
+        If the process stalled past several edges, the missed ones are skipped
+        rather than closed back to back as empty buckets.
+        """
+        step = self._bucket_seconds
+        boundary = (self._clock() // step + 1) * step
+        if self._last_boundary is not None:
+            boundary = max(boundary, self._last_boundary + step)
+        return boundary
+
+    async def _sleep_until(self, boundary: float) -> None:
+        """Sleep until the clock has really reached ``boundary``.
+
+        Event-loop timers can wake a little early; closing the bucket then
+        would let the next iteration pick the same edge again.
+        """
+        while (remaining := boundary - self._clock()) > 0:
+            await self._sleep(remaining)

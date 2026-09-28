@@ -7,6 +7,8 @@ interface SummaryStripProps {
   latest: StatsPoint | undefined;
   alerts: Alert[];
   now: number;
+  /** Sliding window length from /api/health, for the labels. */
+  windowSeconds?: number;
 }
 
 function countToday(alerts: Alert[], now: number): Record<Severity, number> {
@@ -19,7 +21,7 @@ function countToday(alerts: Alert[], now: number): Record<Severity, number> {
 }
 
 /** A compact row of the numbers an on-call engineer checks first. */
-export function SummaryStrip({ latest, alerts, now }: SummaryStripProps) {
+export function SummaryStrip({ latest, alerts, now, windowSeconds = 60 }: SummaryStripProps) {
   const openCount = alerts.filter((a) => a.status === 'open').length;
   const today = countToday(alerts, now);
 
@@ -27,7 +29,7 @@ export function SummaryStrip({ latest, alerts, now }: SummaryStripProps) {
     <section className="summary-strip panel" aria-label="Current summary">
       <dl className="summary-strip__grid">
         <div className="metric">
-          <dt>Error rate (60s window)</dt>
+          <dt>Error rate ({windowSeconds}s window)</dt>
           <dd>
             <span className="metric__value">{formatPercent(latest?.error_rate)}</span>
             {latest?.severity && <SeverityBadge severity={latest.severity} />}
@@ -54,7 +56,7 @@ export function SummaryStrip({ latest, alerts, now }: SummaryStripProps) {
           </dd>
         </div>
         <div className="metric">
-          <dt>Log lines (60s)</dt>
+          <dt>Log lines ({windowSeconds}s)</dt>
           <dd>
             <span className="metric__value">{formatCount(latest?.total)}</span>
             <span className="metric__note">

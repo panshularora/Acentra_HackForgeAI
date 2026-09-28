@@ -148,15 +148,18 @@ class Detector:
     def close_bucket(self, end: datetime) -> DetectionResult:
         """Close the open bucket at ``end``, score the window and advance the incident."""
         self._window.push(self._accumulator.close(end))
+        # A window with no lines has no error rate (not 0%): nothing is scored,
+        # nothing is learned, and the chart shows a gap.
+        empty = self._window.total == 0
         rate = self._window.error_rate
-        score = self._baseline.score(rate)
+        score = None if empty else self._baseline.score(rate)
         severity = classify(score, self.config.thresholds) if self._has_enough_data() else None
 
         stats = StatsPoint(
             ts=end,
             total=self._window.total,
             errors=self._window.errors,
-            error_rate=rate,
+            error_rate=None if empty else rate,
             baseline_median=self._baseline.median,
             band_upper=self._baseline.upper_band(self.config.thresholds.warning),
             score=score,
@@ -164,7 +167,8 @@ class Detector:
         )
         alert_event = self._advance_incident(end, severity, score, rate)
 
-        if self._incident is None and alert_event is None and self._window.is_full:
+        learnable = self._window.is_full and not empty
+        if self._incident is None and alert_event is None and learnable:
             self._baseline.update(rate)
         return DetectionResult(stats=stats, alert_event=alert_event)
 

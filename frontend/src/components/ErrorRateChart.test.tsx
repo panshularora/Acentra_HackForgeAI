@@ -32,4 +32,17 @@ describe('ErrorRateChart', () => {
     expect(screen.getByRole('heading', { name: 'Error rate (60s window)' })).toBeInTheDocument();
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
+
+  it('takes window and bucket lengths from the detector timing', () => {
+    render(
+      <ErrorRateChart
+        stats={[]}
+        baseline={{ kind: 'waiting' }}
+        connection="live"
+        timing={{ window_seconds: 120, bucket_seconds: 20, baseline_min_buckets: 4 }}
+      />,
+    );
+    expect(screen.getByRole('heading', { name: 'Error rate (120s window)' })).toBeInTheDocument();
+    expect(screen.getByText(/Waiting for the first 20-second bucket/)).toBeInTheDocument();
+  });
 });

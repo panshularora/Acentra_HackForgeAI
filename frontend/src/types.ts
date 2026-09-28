@@ -13,13 +13,13 @@ export interface StatsPoint {
   total: number;
   /** Error lines in the sliding window. */
   errors: number;
-  /** errors / total over the window, 0..1. */
-  error_rate: number;
+  /** errors / total over the window, 0..1; null when the window held no lines. */
+  error_rate: number | null;
   /** Rolling median of error_rate; null until the baseline is warm. */
   baseline_median: number | null;
   /** Upper edge of "normal" (median + 3.5 · MAD / 0.6745); null until warm. */
   band_upper: number | null;
-  /** Modified z-score of this bucket; null until warm. */
+  /** Modified z-score of this bucket; null until warm or when the window is empty. */
   score: number | null;
   severity: Severity | null;
 }
@@ -78,6 +78,21 @@ export interface Alert {
   };
 }
 
+/** Detector timing reported by /api/health, used for chart labels and warm-up progress. */
+export interface DetectorTiming {
+  window_seconds: number;
+  bucket_seconds: number;
+  baseline_min_buckets: number;
+}
+
+/** Troubleshooting counters reported by /api/health. */
+export interface PipelineCounters {
+  parsed_lines: number;
+  malformed_lines: number;
+  baseline_warm: boolean;
+  websocket_clients: number;
+}
+
 export interface Health {
   status: 'ok';
   app: string;
@@ -88,6 +103,8 @@ export interface Health {
     cloudwatch_log_group: string | null;
     endpoint: string | null;
   };
+  detector: DetectorTiming;
+  pipeline: PipelineCounters;
 }
 
 /** Server -> client WebSocket messages, discriminated on `type`. */
