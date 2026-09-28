@@ -21,7 +21,14 @@ _PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"\bM\d{7}\b"), "<MEMBER_ID>"),
     (re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+"), "<EMAIL>"),
     (re.compile(r"\b\d{3}-\d{2}-\d{4}\b"), "<SSN>"),
-    (re.compile(r"(?:\+1[-. ]?)?(?:\(\d{3}\)\s?|\b\d{3}[-. ])\d{3}[-. ]\d{4}\b"), "<PHONE>"),
+    (
+        re.compile(r"(?:\+1[-. ]?|\b1[-.])?(?:\(\d{3}\)\s?|\b\d{3}[-. ])\d{3}[-. ]\d{4}\b"),
+        "<PHONE>",
+    ),
+    # Unformatted numbers are only treated as phones with a +1 prefix or a
+    # phone key; a bare run of ten digits is as likely to be a claim number.
+    (re.compile(r"\+1\d{10}\b"), "<PHONE>"),
+    (re.compile(r"\b(phone|mobile)=\d{10}\b"), r"\1=<PHONE>"),
 )
 
 # A number that is not part of a word, a placeholder or a dotted IP address.
