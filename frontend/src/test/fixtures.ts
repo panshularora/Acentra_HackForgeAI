@@ -62,6 +62,29 @@ export function makeAlert(overrides: Partial<Alert> = {}): Alert {
   };
 }
 
+/** An alert carrying every contract v2 field, as the template-aware backend sends it. */
+export function makeExplainedAlert(overrides: Partial<Alert> = {}): Alert {
+  return makeAlert({
+    detector: 'error_spike',
+    template: {
+      id: 't-17',
+      text: 'DB connection timeout for member <*> after <*>ms',
+      service: 'claim-adjudication',
+    },
+    baseline_band: { median: 1, upper: 4, unit: 'errors/60s' },
+    observed: 212,
+    first_bad_line:
+      '2026-09-28T13:04:58Z ERROR claim-adjudication ip=10.4.2.17 DB connection timeout for member <MEMBER_ID> after 5000ms',
+    params: [
+      { name: 'source_ip', value: '10.4.2.17', count: 206, share: 0.97 },
+      { name: 'timeout_ms', value: '5000', count: 212, share: 1 },
+      { name: 'member', value: '<MEMBER_ID>', count: 212, share: 1 },
+      { name: 'claim', value: '<CLAIM_ID>', count: 212, share: 1 },
+    ],
+    ...overrides,
+  });
+}
+
 /** Element at `index` (negative counts from the end); throws instead of returning undefined. */
 export function nth<T>(items: readonly T[], index: number): T {
   const item = items.at(index);

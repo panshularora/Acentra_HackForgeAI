@@ -1,6 +1,9 @@
 /**
  * Wire types shared with the backend. These mirror CONTRACT.md exactly;
  * if the contract changes, this file is the only place that should need to.
+ *
+ * Fields added by contract v2 (template-aware detection) are optional and
+ * nullable: older backends omit them and the dashboard must still render.
  */
 
 export type Severity = 'WARNING' | 'HIGH' | 'CRITICAL';
@@ -22,6 +25,45 @@ export interface StatsPoint {
   /** Modified z-score of this bucket; null until warm or when the window is empty. */
   score: number | null;
   severity: Severity | null;
+  /** Contract v2: detector warm-up progress; absent on older backends. */
+  learning?: LearningState | null;
+}
+
+/** Contract v2: how far the detector is through learning its baselines. */
+export interface LearningState {
+  state: 'learning' | 'ready';
+  buckets_seen: number;
+  buckets_needed: number;
+  /** Distinct log templates (Drain3) seen so far. */
+  templates: number;
+}
+
+/** Contract v2: the detector that opened an incident. */
+export type DetectorKind = 'error_spike' | 'silence' | 'new_pattern' | 'flow_break';
+
+/** Contract v2: the log template an incident is about, with variable parts as `<*>`. */
+export interface LogTemplate {
+  id: string;
+  text: string;
+  service: string | null;
+}
+
+/** Contract v2: the learned normal band for the incident's signal. */
+export interface BaselineBand {
+  median: number;
+  /** Edge of normal; values above it are anomalous. */
+  upper: number;
+  /** e.g. "errors/60s", "seconds between lines", "incomplete flows/60s". */
+  unit: string;
+}
+
+/** Contract v2: a top value of a parameter extracted from the template. */
+export interface ExtractedParam {
+  name: string;
+  value: string;
+  count: number;
+  /** Fraction of the incident's lines carrying this value, 0..1. */
+  share: number;
 }
 
 export type AlertStatus = 'open' | 'resolved';
@@ -76,6 +118,15 @@ export interface Alert {
     sns: SnsDelivery;
     cloudwatch: CloudWatchDelivery;
   };
+  /** Contract v2 fields below; each may be missing or null. */
+  detector?: DetectorKind | null;
+  template?: LogTemplate | null;
+  baseline_band?: BaselineBand | null;
+  /** The value that broke the band at peak, in baseline_band.unit. */
+  observed?: number | null;
+  /** Masked raw line that first crossed the band. */
+  first_bad_line?: string | null;
+  params?: ExtractedParam[] | null;
 }
 
 /** Detector timing reported by /api/health, used for chart labels and warm-up progress. */
@@ -83,6 +134,8 @@ export interface DetectorTiming {
   window_seconds: number;
   bucket_seconds: number;
   baseline_min_buckets: number;
+  /** Contract v2: detectors the backend runs. */
+  detectors?: DetectorKind[];
 }
 
 /** Troubleshooting counters reported by /api/health. */
@@ -105,6 +158,8 @@ export interface Health {
   };
   detector: DetectorTiming;
   pipeline: PipelineCounters;
+  /** Contract v2: same object as StatsPoint.learning. */
+  learning?: LearningState | null;
 }
 
 /** Server -> client WebSocket messages, discriminated on `type`. */
