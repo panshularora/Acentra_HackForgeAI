@@ -1,5 +1,9 @@
 # ClaimsWatch
 
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-Vercel-black?logo=vercel)](https://frontend-nine-rouge-53.vercel.app)
+
+> 🚀 **[Live Dashboard → https://frontend-nine-rouge-53.vercel.app](https://frontend-nine-rouge-53.vercel.app)**
+
 When a Medicaid eligibility service starts failing, the on-call engineer learns within seconds what is failing and where, before members are turned away at the pharmacy.
 
 ClaimsWatch tails a live application log, learns what normal looks like for each kind of log line, flags statistically significant deviations with a severity level, streams them to a dashboard over WebSockets and publishes them to AWS SNS and CloudWatch Logs, with patient identifiers masked before anything leaves the parser.
