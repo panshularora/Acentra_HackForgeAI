@@ -11,8 +11,11 @@ from collections.abc import Iterable, Sequence
 
 from app.models import Contributor, LogEvent, TopContributors
 
-# One IP producing at least this share of all errors is treated as the story.
-DOMINANT_IP_SHARE = 0.6
+# Background errors come from many client IPs, each with a tiny share, so one
+# address behind this much of all errors is the story (40% lets the summary
+# name an attacker in the first bucket of a burst, while background errors
+# are still in the window).
+DOMINANT_IP_SHARE = 0.4
 AUTH_FAILURE_STATUSES = frozenset({401, 403})
 
 

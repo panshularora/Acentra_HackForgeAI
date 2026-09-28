@@ -71,3 +71,25 @@ def test_summary_for_dominant_ip_without_auth_failures_uses_message() -> None:
 
 def test_summary_without_errors_is_generic() -> None:
     assert summarise([], window_seconds=60) == "Error rate is above its normal range"
+
+
+def test_ip_is_named_once_it_drives_forty_percent_of_errors() -> None:
+    errors = [
+        make_event("ERROR", "member-auth", "login failed", source_ip="10.4.2.17", http_status=401)
+        for _ in range(45)
+    ]
+    errors += [make_event("ERROR", source_ip=f"10.1.0.{n}") for n in range(55)]
+
+    assert summarise(errors, window_seconds=60) == "45 failed logins from 10.4.2.17 in the last 60s"
+
+
+def test_ip_below_the_dominance_share_falls_back_to_service_summary() -> None:
+    errors = [
+        make_event("ERROR", "member-auth", "login failed", source_ip="10.4.2.17", http_status=401)
+        for _ in range(30)
+    ]
+    errors += [make_event("ERROR", "eligibility-check", "upstream 502") for _ in range(70)]
+
+    assert summarise(errors, window_seconds=60).startswith(
+        "70% of errors come from eligibility-check"
+    )
