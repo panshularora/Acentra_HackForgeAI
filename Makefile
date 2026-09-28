@@ -29,9 +29,18 @@ format: ## Apply formatting and safe lint fixes
 	cd backend && .venv/bin/ruff check --fix . ../tools && .venv/bin/ruff format . ../tools
 
 typecheck: ## Static type check
-	cd backend && .venv/bin/mypy app
+	cd backend && .venv/bin/mypy app ../tools
 
 check: lint typecheck test ## Everything CI runs
+
+loggen: ## Write normal claims traffic to logs/app.log (RATE=40)
+	$(BIN)/python tools/loggen.py --rate $(RATE)
+
+incident-db: ## Inject a 45 s claim-adjudication database outage
+	$(BIN)/python tools/loggen.py --incident db-outage --duration 45
+
+incident-auth: ## Inject a 30 s credential-stuffing burst against member-auth
+	$(BIN)/python tools/loggen.py --incident cred-stuffing --duration 30
 
 clean: ## Remove caches and local state
 	rm -rf backend/.pytest_cache backend/.mypy_cache backend/.ruff_cache claimswatch.db logs
