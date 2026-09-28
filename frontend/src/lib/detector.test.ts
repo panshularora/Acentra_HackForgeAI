@@ -1,6 +1,9 @@
-import { makeHealth, makeStatsSeries } from '../test/fixtures';
+import { makeHealth, makeStatsPoint, makeStatsSeries } from '../test/fixtures';
+import type { LearningState } from '../types';
 import {
+  baselineFromLearning,
   baselineState,
+  currentBaselineState,
   DEFAULT_DETECTOR_TIMING,
   describeBaseline,
   detectorLabel,
@@ -94,5 +97,84 @@ describe('detectorLabel', () => {
   it('humanises a detector this build does not know yet', () => {
     expect(detectorLabel('rate_drop')).toBe('Rate drop');
     expect(detectorLabel('toString')).toBe('ToString');
+  });
+});
+
+describe('currentBaselineState', () => {
+  const learning = (overrides: Partial<LearningState> = {}): LearningState => ({
+    state: 'learning',
+    buckets_seen: 4,
+    buckets_needed: 6,
+    templates: 21,
+    ...overrides,
+  });
+  const cold = { baseline_median: null, band_upper: null, score: null };
+
+  it('follows the learning object on the newest stats bucket', () => {
+    const stats = [
+      makeStatsPoint({ ts: '2026-09-28T13:05:00Z', learning: learning({ buckets_seen: 3 }) }),
+      makeStatsPoint({ ts: '2026-09-28T13:05:10Z', learning: learning() }),
+    ];
+    const state = currentBaselineState(stats, makeHealth());
+    expect(state).toEqual({ kind: 'learning', collected: 4, required: 6 });
+    expect(describeBaseline(state)).toBe('Learning baseline, 4 of 6 buckets');
+  });
+
+  it('reports monitoring with the template count once ready', () => {
+    const stats = [makeStatsPoint({ learning: learning({ state: 'ready', templates: 38 }) })];
+    const state = currentBaselineState(stats, null);
+    expect(state).toEqual({ kind: 'ready', templates: 38 });
+    expect(describeBaseline(state)).toBe('Monitoring, 38 templates');
+  });
+
+  it('uses the /api/health learning object before any bucket has arrived', () => {
+    const health = makeHealth({ learning: learning({ buckets_seen: 1 }) });
+    expect(currentBaselineState([], health)).toEqual({
+      kind: 'learning',
+      collected: 1,
+      required: 6,
+    });
+  });
+
+  it('prefers the live bucket over the learning state /api/health reported on load', () => {
+    const health = makeHealth({ learning: learning({ buckets_seen: 1 }) });
+    const stats = [makeStatsPoint({ learning: learning({ state: 'ready' }) })];
+    expect(currentBaselineState(stats, health)).toMatchObject({ kind: 'ready' });
+  });
+
+  it('estimates from the buckets and health timing when the backend sends no learning', () => {
+    const health = makeHealth({
+      detector: { window_seconds: 40, bucket_seconds: 10, baseline_min_buckets: 3 },
+    });
+    expect(currentBaselineState(makeStatsSeries(5, undefined, cold), health)).toEqual({
+      kind: 'learning',
+      collected: 2,
+      required: 3,
+    });
+    expect(currentBaselineState(makeStatsSeries(2, undefined, { learning: null }), null)).toEqual({
+      kind: 'ready',
+    });
+    expect(currentBaselineState([], null)).toEqual({ kind: 'waiting' });
+  });
+});
+
+describe('baselineFromLearning', () => {
+  it('never reports more buckets than needed', () => {
+    expect(
+      baselineFromLearning({
+        state: 'learning',
+        buckets_seen: 9,
+        buckets_needed: 6,
+        templates: 0,
+      }),
+    ).toEqual({ kind: 'learning', collected: 6, required: 6 });
+  });
+});
+
+describe('describeBaseline once ready', () => {
+  it('says monitoring, with the template count when known', () => {
+    expect(describeBaseline({ kind: 'ready' })).toBe('Monitoring');
+    expect(describeBaseline({ kind: 'ready', templates: 1 })).toBe('Monitoring, 1 template');
+    expect(describeBaseline({ kind: 'ready', templates: 0 })).toBe('Monitoring, 0 templates');
   });
 });
