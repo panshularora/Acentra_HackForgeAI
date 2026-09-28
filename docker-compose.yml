@@ -1,0 +1,63 @@
+# One-command local stack: AWS emulator, backend, log generator and dashboard.
+#
+#   docker compose up --build
+#   open http://localhost:5173
+#
+# Inject incidents into the running log generator:
+#   docker compose exec loggen python tools/loggen.py --incident db-outage --duration 45
+#   docker compose exec loggen python tools/loggen.py --incident cred-stuffing --duration 30
+#
+# Read alerts back from SNS:
+#   docker compose exec backend python tools/sns_tail.py
+
+name: claimswatch
+
+services:
+  moto:
+    # Local AWS emulator (SNS, SQS, CloudWatch Logs). No AWS account needed.
+    image: motoserver/moto:5.2.3
+    ports:
+      - "5000:5000"
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      AWS_ENDPOINT_URL: http://moto:5000
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: testing
+      AWS_SECRET_ACCESS_KEY: testing
+      CORS_ORIGINS: '["http://localhost:5173"]'
+    volumes:
+      - logs:/app/logs
+      - data:/app/data
+    ports:
+      - "8000:8000"
+    depends_on:
+      - moto
+
+  loggen:
+    # Same image as the backend; writes normal claims traffic to the shared volume.
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["python", "tools/loggen.py", "--rate", "40"]
+    healthcheck:
+      disable: true
+    volumes:
+      - logs:/app/logs
+    depends_on:
+      - backend
+
+  frontend:
+    # Built dashboard served by nginx, which proxies /api and /ws to "backend".
+    build: ./frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+volumes:
+  logs:
+  data:

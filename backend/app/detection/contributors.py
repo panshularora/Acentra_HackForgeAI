@@ -11,8 +11,11 @@ from collections.abc import Iterable, Sequence
 
 from app.models import Contributor, LogEvent, TopContributors
 
-# One IP producing at least this share of all errors is treated as the story.
-DOMINANT_IP_SHARE = 0.6
+# Background errors come from many client IPs, each with a tiny share, so one
+# address behind this much of all errors is the story (40% lets the summary
+# name an attacker in the first bucket of a burst, while background errors
+# are still in the window).
+DOMINANT_IP_SHARE = 0.4
 AUTH_FAILURE_STATUSES = frozenset({401, 403})
 
 
@@ -49,6 +52,22 @@ def summarise(events: Sequence[LogEvent], window_seconds: int) -> str:
     service_events = [e for e in events if e.service == service]
     message, _ = _most_common_with_share(e.message for e in service_events)
     return f"{service_share:.0%} of errors come from {service}: {message}"
+
+
+def sample_lines(events: Sequence[LogEvent], limit: int) -> list[str]:
+    """Up to ``limit`` masked lines, newest first, showing the dominant error first.
+
+    Lines carrying the most common message come before background errors, so
+    the examples on an alert illustrate its summary rather than whatever
+    happened to fail last.
+    """
+    if not events or limit <= 0:
+        return []
+    top_message, _ = _most_common_with_share(e.message for e in events)
+    newest_first = list(reversed(events))
+    typical = [e.raw for e in newest_first if e.message == top_message]
+    others = [e.raw for e in newest_first if e.message != top_message]
+    return (typical + others)[:limit]
 
 
 def _summarise_dominant_ip(events: Sequence[LogEvent], window_seconds: int) -> str | None:

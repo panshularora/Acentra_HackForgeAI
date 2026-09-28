@@ -1,10 +1,11 @@
 import pytest
 
-from app.detection.contributors import rank, summarise, top_contributors
+from app.detection.contributors import rank, sample_lines, summarise, top_contributors
+from app.models import LogEvent
 from tests.factories import make_event
 
 
-def db_outage_errors() -> list:
+def db_outage_errors() -> list[LogEvent]:
     errors = [make_event("ERROR", "claim-adjudication", "DB connection timeout") for _ in range(47)]
     errors += [make_event("ERROR", "eligibility-check", "upstream 502") for _ in range(3)]
     return errors
@@ -71,3 +72,44 @@ def test_summary_for_dominant_ip_without_auth_failures_uses_message() -> None:
 
 def test_summary_without_errors_is_generic() -> None:
     assert summarise([], window_seconds=60) == "Error rate is above its normal range"
+
+
+def test_ip_is_named_once_it_drives_forty_percent_of_errors() -> None:
+    errors = [
+        make_event("ERROR", "member-auth", "login failed", source_ip="10.4.2.17", http_status=401)
+        for _ in range(45)
+    ]
+    errors += [make_event("ERROR", source_ip=f"10.1.0.{n}") for n in range(55)]
+
+    assert summarise(errors, window_seconds=60) == "45 failed logins from 10.4.2.17 in the last 60s"
+
+
+def test_ip_below_the_dominance_share_falls_back_to_service_summary() -> None:
+    errors = [
+        make_event("ERROR", "member-auth", "login failed", source_ip="10.4.2.17", http_status=401)
+        for _ in range(30)
+    ]
+    errors += [make_event("ERROR", "eligibility-check", "upstream 502") for _ in range(70)]
+
+    assert summarise(errors, window_seconds=60).startswith(
+        "70% of errors come from eligibility-check"
+    )
+
+
+def test_sample_lines_show_the_dominant_error_first_newest_first() -> None:
+    def timeout(n: int) -> LogEvent:
+        return make_event("ERROR", "claim-adjudication", "DB connection timeout", raw=f"t{n}")
+
+    background = make_event("ERROR", "payment-gateway", "card declined", raw="declined")
+
+    lines = sample_lines([timeout(0), timeout(1), background, timeout(2)], limit=3)
+
+    assert lines == ["t2", "t1", "t0"]
+
+
+def test_sample_lines_fill_up_with_other_errors() -> None:
+    events = [make_event("ERROR", message="a"), make_event("ERROR", message="a")]
+    events.append(make_event("ERROR", message="b"))
+
+    assert len(sample_lines(events, limit=5)) == 3
+    assert sample_lines([], limit=5) == []

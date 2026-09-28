@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from moto import mock_aws
 
 from app.config import Settings
 from app.main import create_app
@@ -86,6 +87,10 @@ def test_health_reports_pipeline_state(client: TestClient, log_path: Path) -> No
     assert body["tailer_offset"] == log_path.stat().st_size
     assert body["aws"] == {"sns_topic_arn": None, "cloudwatch_log_group": None, "endpoint": None}
     assert body["pipeline"]["parsed_lines"] == 5
+
+
+def test_liveness_probe(client: TestClient) -> None:
+    assert client.get("/health").json() == {"status": "ok"}
 
 
 def test_stats_endpoint_returns_closed_buckets(client: TestClient, log_path: Path) -> None:
@@ -172,3 +177,27 @@ def test_disconnected_client_is_removed(client: TestClient) -> None:
     while services_of(client).clients.client_count:
         assert time.monotonic() < deadline
         time.sleep(0.01)
+
+
+def test_alert_delivery_to_aws_is_reported_on_the_feed(
+    tmp_path: Path, log_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for key in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"):
+        monkeypatch.setenv(key, "testing")
+    overrides = {**TEST_SETTINGS, "aws_enabled": True, "aws_endpoint_url": None}
+    settings = Settings(log_path=log_path, db_path=tmp_path / "aws.db", **overrides)
+
+    with mock_aws(), TestClient(create_app(settings)) as aws_client:
+        health = aws_client.get("/api/health").json()
+        with aws_client.websocket_connect("/ws") as ws:
+            run_incident(aws_client, log_path)
+            alerts = [
+                m["data"] for m in (ws.receive_json() for _ in range(9)) if m["type"] == "alert"
+            ]
+
+    assert health["aws"]["sns_topic_arn"].endswith(":claimswatch-alerts")
+    assert health["aws"]["cloudwatch_log_group"] == "/claimswatch/alerts"
+    assert alerts[0]["delivery"]["sns"]["status"] == "pending"
+    assert alerts[-1]["delivery"]["sns"]["status"] == "sent"
+    assert alerts[-1]["delivery"]["sns"]["message_id"]
+    assert alerts[-1]["delivery"]["cloudwatch"]["status"] == "sent"
