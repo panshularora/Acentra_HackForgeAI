@@ -84,7 +84,7 @@ We had no AWS account for the event, so locally it runs against [moto](https://g
 docker compose up --build
 ```
 
-Open http://localhost:5173 (dashboard) or http://localhost:8000/docs (API). Wait about two minutes for the baseline to warm up, then inject incidents:
+Open http://localhost:5173 (dashboard) or http://localhost:8000/docs (API). Wait about two minutes for the baseline to warm up (`baseline_warm: true` in `/api/health`), then inject incidents:
 
 ```bash
 docker compose exec loggen python tools/loggen.py --incident db-outage --duration 45
@@ -94,6 +94,14 @@ docker compose exec loggen python tools/loggen.py --incident heartbeat-stop --du
 docker compose exec loggen python tools/loggen.py --incident flow-break --duration 60
 docker compose exec backend python tools/sns_tail.py      # alerts as SNS delivers them
 ```
+
+The stack publishes the dashboard on 5173, the API on 8000 and moto on 5000. If a port is already in use, override it:
+
+```bash
+FRONTEND_PORT=8080 BACKEND_PORT=18000 MOTO_PORT=15000 docker compose up --build
+```
+
+`docker compose down -v` stops the stack and deletes the log and alert-history volumes.
 
 ### Without Docker
 

@@ -1,12 +1,20 @@
+# Build context for backend/Dockerfile (repository root). The image only needs
+# backend/ and tools/, so keep everything else out of the context.
 .git
+.github
+.env
+.env.*
+docs
+frontend
+backend/tests
 **/.venv
 **/__pycache__
+**/*.py[cod]
 **/.pytest_cache
 **/.mypy_cache
 **/.ruff_cache
 **/node_modules
-frontend/dist
-logs
-*.db
-.env
-docs
+**/dist
+**/logs
+**/*.log
+**/*.db
