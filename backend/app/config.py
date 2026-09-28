@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     log_path: Path = Path("logs/app.log")
     db_path: Path = Path("claimswatch.db")
     tail_poll_seconds: float = Field(default=0.25, gt=0)
+    # Like `tail -f`, start at the end of an existing file by default so old
+    # history is not replayed into the live window.
+    tail_from_start: bool = False
 
     # Sliding window: fixed buckets rolled into a longer window.
     window_seconds: int = Field(default=60, gt=0)
