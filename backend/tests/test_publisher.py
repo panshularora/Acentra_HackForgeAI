@@ -12,6 +12,7 @@ from app.alerts.publisher import AlertPublisher, sns_subject
 from app.config import Settings
 from app.ingest.parser import LogParser
 from app.models import Delivery, Severity
+from tests.aws import subscribe_queue
 from tests.factories import make_alert
 
 RAW_PHI_LINE = (
@@ -42,17 +43,6 @@ def critical_alert_from_real_line() -> Any:
     event = LogParser().parse(RAW_PHI_LINE)
     assert event is not None
     return make_alert("crit01", severity=Severity.CRITICAL, sample_lines=[event.raw])
-
-
-def subscribe_queue(topic_arn: str) -> str:
-    sqs = boto3.client("sqs", region_name="us-east-1")
-    sns = boto3.client("sns", region_name="us-east-1")
-    queue_url = sqs.create_queue(QueueName="oncall")["QueueUrl"]
-    queue_arn = sqs.get_queue_attributes(QueueUrl=queue_url, AttributeNames=["QueueArn"])[
-        "Attributes"
-    ]["QueueArn"]
-    sns.subscribe(TopicArn=topic_arn, Protocol="sqs", Endpoint=queue_arn)
-    return queue_url
 
 
 def test_ensure_resources_is_idempotent(aws: None) -> None:
