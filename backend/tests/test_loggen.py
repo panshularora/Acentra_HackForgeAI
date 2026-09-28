@@ -325,3 +325,12 @@ def test_cli_normal_traffic_applies_active_faults(
     assert beat in clean.read_text()
     assert beat not in silenced.read_text()
     assert "claim validated" in silenced.read_text()
+
+
+def test_claim_ids_survive_masking_so_flows_can_be_paired() -> None:
+    lines = [line for line in simulate(60) if "claim_id=" in line]
+
+    events = parse_all(lines)
+
+    assert [CLAIM_ID.findall(e.raw) for e in events] == [CLAIM_ID.findall(line) for line in lines]
+    assert all(CLAIM_ID.findall(line) for line in lines)
