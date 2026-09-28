@@ -106,6 +106,21 @@ make replay
 > detector. Both incidents are caught within two ten-second buckets, with zero
 > false alarms during the normal traffic. It runs in our test suite."
 
+## Extra faults: quiet failures (optional)
+
+Three more faults need no error spike to matter. Run them the same way, with
+`make loggen` still running (the last two remove lines from its output):
+
+```bash
+make incident-new       # a never-seen TLS certificate error to the payer gateway, 0.5/s for 45 s
+make incident-silence   # eligibility-sync stops sending its 5 s heartbeat for 60 s
+make incident-flow      # validated claims stop being adjudicated for 60 s
+```
+
+> "These are the failures a global error rate cannot see: a new error at low
+> volume, a service that goes quiet, and claims that enter the pipeline but
+> never come out. The last two add no error lines at all."
+
 ## Likely questions
 
 **Why not just use CloudWatch anomaly detection?**

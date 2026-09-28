@@ -6,7 +6,7 @@ BIN     := $(VENV)/bin
 RATE    ?= 40
 
 .DEFAULT_GOAL := help
-.PHONY: help install dev test lint format typecheck check loggen incident-db incident-auth replay moto feed sns-tail dashboard demo clean
+.PHONY: help install dev test lint format typecheck check loggen incident-db incident-auth incident-new incident-silence incident-flow replay moto feed sns-tail dashboard demo clean
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-14s %s\n", $$1, $$2}'
@@ -39,7 +39,7 @@ typecheck: ## Static type check
 
 check: lint typecheck test ## Everything CI runs
 
-loggen: ## Write normal claims traffic to logs/app.log (RATE=40)
+loggen: ## Write normal traffic, heartbeats and claim flows to logs/app.log (RATE=40)
 	$(BIN)/python tools/loggen.py --rate $(RATE)
 
 incident-db: ## Inject a 45 s claim-adjudication database outage
@@ -47,6 +47,15 @@ incident-db: ## Inject a 45 s claim-adjudication database outage
 
 incident-auth: ## Inject a 30 s credential-stuffing burst against member-auth
 	$(BIN)/python tools/loggen.py --incident cred-stuffing --duration 30
+
+incident-new: ## Inject 45 s of a never-seen TLS error calling the payer gateway
+	$(BIN)/python tools/loggen.py --incident new-error --duration 45
+
+incident-silence: ## Silence eligibility-sync heartbeats for 60 s (needs `make loggen`)
+	$(BIN)/python tools/loggen.py --incident heartbeat-stop --duration 60
+
+incident-flow: ## Stop adjudicating validated claims for 60 s (needs `make loggen`)
+	$(BIN)/python tools/loggen.py --incident flow-break --duration 60
 
 replay: ## Replay a known scenario and print detection latency and false alarms
 	PYTHONPATH=backend $(BIN)/python tools/replay.py
