@@ -8,7 +8,7 @@ import type { StatsPoint } from '../types';
 export const WINDOW_SECONDS = 60;
 export const BUCKET_SECONDS = 10;
 export const WINDOW_BUCKETS = WINDOW_SECONDS / BUCKET_SECONDS;
-export const BASELINE_MIN_BUCKETS = 12;
+export const BASELINE_MIN_BUCKETS = 6;
 
 export type BaselineState =
   | { kind: 'waiting' }
