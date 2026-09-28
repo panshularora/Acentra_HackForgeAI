@@ -114,7 +114,15 @@ make replay     # detection latency and false alarms on a known scenario
 cd frontend && npm test
 ```
 
-The backend suite has 146 tests, one file per module, including moto-backed AWS delivery tests and an end-to-end WebSocket test that writes lines to a real log file and receives the resulting stats and alert messages.
+The backend suite has one test file per module, including moto-backed AWS delivery tests and an end-to-end WebSocket test that writes lines to a real log file and receives the resulting stats and alert messages.
+
+## Test results
+
+| Suite | Result |
+| --- | --- |
+| Backend (`make check`) | 150 tests passing; ruff and mypy `--strict` clean |
+| Frontend (`npm test`, Node 22) | 87 tests passing; ESLint, `tsc`, Prettier and production build clean |
+| Replay (`make replay`, 48,363 lines) | DB outage detected in 20 s (2 buckets), credential stuffing in 10 s (1 bucket), 0 false alarms |
 
 ## Project structure
 
@@ -169,7 +177,9 @@ All settings live in `backend/app/config.py` and can be overridden with environm
 
 ## Frontend
 
-The dashboard in `frontend/` (React, TypeScript, Vite) shows the error rate against the learned band and a live feed of alert cards with severity, summary, top contributors, masked sample lines, SNS/CloudWatch delivery status and an acknowledge button. It reconnects with backoff and backfills from the REST API after every reconnect. Details in [frontend/README.md](frontend/README.md).
+The dashboard (`frontend/`, React + TypeScript) keeps one WebSocket open to `/ws`. It plots the 60-second error rate against the learned normal band and shows each incident as a card: a text severity label, a one-line summary of what broke and where, the top services, messages and source IPs, masked sample log lines, SNS and CloudWatch delivery status with the SNS message ID, and an Acknowledge button. If the connection drops, a banner says the data is stale and the dashboard reconnects with backoff, reloading history each time, so a refresh or a backend restart never leaves a gap. Colour is used only for severity, which is always also written as text.
+
+Window length, bucket size and baseline warm-up are read from `/api/health`, so the labels follow the backend configuration. The frontend requires Node 22 or newer; see [frontend/README.md](frontend/README.md) for commands and structure.
 
 ## How we built this
 
