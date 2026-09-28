@@ -34,6 +34,17 @@ export function formatCount(n: number | null | undefined): string {
   return countFormatter.format(Math.round(n));
 }
 
+/**
+ * A detector measurement in its own unit (errors/60s, seconds between lines):
+ * whole numbers stay whole, "212" or "1,204"; fractions keep one decimal, or
+ * two below 1 so they never read as 0.
+ */
+export function formatMeasure(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return EM_DASH;
+  if (Number.isInteger(n) || Math.abs(n) >= 100) return countFormatter.format(Math.round(n));
+  return String(Number(n.toFixed(Math.abs(n) < 1 ? 2 : 1)));
+}
+
 /** "just now", "42s ago", "7m ago", "3h ago", "2d ago". */
 export function formatRelative(iso: string, now: number): string {
   const seconds = Math.round((now - Date.parse(iso)) / 1000);
