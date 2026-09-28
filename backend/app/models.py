@@ -64,12 +64,15 @@ class LogEvent:
 
 @dataclass(frozen=True, slots=True)
 class StatsPoint:
-    """Sliding-window statistics published once per closed bucket."""
+    """Sliding-window statistics published once per closed bucket.
+
+    ``error_rate`` and ``score`` are None when the window held no lines.
+    """
 
     ts: datetime
     total: int
     errors: int
-    error_rate: float
+    error_rate: float | None
     baseline_median: float | None
     band_upper: float | None
     score: float | None
@@ -81,7 +84,7 @@ class StatsPoint:
             "ts": to_iso(self.ts),
             "total": self.total,
             "errors": self.errors,
-            "error_rate": round(self.error_rate, 4),
+            "error_rate": _round_or_none(self.error_rate, 4),
             "baseline_median": _round_or_none(self.baseline_median, 4),
             "band_upper": _round_or_none(self.band_upper, 4),
             "score": _round_or_none(self.score, 2),

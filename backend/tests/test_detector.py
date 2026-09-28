@@ -191,6 +191,30 @@ def test_second_spike_after_resolution_opens_a_new_incident() -> None:
     assert again.alert_event.alert.id == "inc1"
 
 
+def test_empty_window_has_no_rate_and_teaches_the_baseline_nothing() -> None:
+    harness = Harness()
+    harness.warm_up()
+    for _ in range(6):
+        result = harness.bucket(0, 0)
+
+    assert result.stats.total == 0
+    assert result.stats.error_rate is None
+    assert result.stats.score is None
+    assert result.stats.severity is None
+    assert result.stats.to_dict()["error_rate"] is None
+    assert result.stats.baseline_median == 0.02
+
+
+def test_partly_empty_window_still_has_a_rate() -> None:
+    harness = Harness()
+    harness.warm_up()
+
+    stats = harness.bucket(0, 0).stats
+
+    assert stats.error_rate == 0.02
+    assert stats.score == 0.0
+
+
 def test_detection_package_has_no_web_or_cloud_dependencies() -> None:
     forbidden = {"fastapi", "starlette", "boto3", "botocore", "uvicorn"}
     package = Path(__file__).parents[1] / "app" / "detection"

@@ -111,6 +111,8 @@ Server to client only. Every message is:
 ```
 
 `total`, `errors` and `error_rate` cover the 60 s window ending at `ts`.
+When the window held no lines at all, `error_rate` and `score` are `null`
+(the rate is undefined, not 0%) and the dashboard draws a gap.
 `baseline_median`, `band_upper` (the error rate at which the score reaches the
 WARNING threshold) and `score` are `null` until the baseline is warm.
 `severity` is `null`, `"WARNING"`, `"HIGH"` or `"CRITICAL"`.
