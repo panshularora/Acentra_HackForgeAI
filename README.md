@@ -68,7 +68,7 @@ Every line is masked in the parser, before any field is extracted: member IDs be
 
 ## AWS
 
-`backend/app/alerts/publisher.py` is real boto3 code. Each alert that opens, escalates or resolves is published to an SNS topic (with `severity` and `status` message attributes for subscription filters) and written to a CloudWatch Logs stream. The topic, log group and stream are created on startup if missing. Delivery runs in a background worker, so AWS latency never delays detection, and each alert records per-channel status (`sent` with the SNS message id, or `failed` with the error).
+`backend/app/alerts/publisher.py` is real boto3 code. Each incident sends one message when it opens, one each time it escalates and one when it resolves. Every message goes to an SNS topic and a CloudWatch Logs stream, carries an `event` field (`opened`, `escalated` or `resolved`) and has `event`, `severity` and `status` message attributes for subscription filters. The topic, log group and stream are created on startup if missing. Delivery runs in a background worker, so AWS latency never delays detection, and each alert records per-channel status (`sent` with the SNS message id, or `failed` with the error).
 
 We had no AWS account for the event, so locally it runs against [moto](https://github.com/getmoto/moto), an AWS emulator, by setting `AWS_ENDPOINT_URL`. To use real AWS, remove `AWS_ENDPOINT_URL` and provide credentials through the usual AWS chain (environment variables, `~/.aws/credentials` or an IAM role). No code changes are needed.
 
