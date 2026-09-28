@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { ConnectionState } from '../hooks/alertStreamReducer';
 import type { BaselineState } from '../lib/detector';
+import { feedOrder } from '../lib/scene';
 import { SEVERITIES, SEVERITY_LABEL, SEVERITY_THRESHOLD } from '../lib/severity';
 import type { Alert, Severity } from '../types';
 import { AlertCard } from './AlertCard';
@@ -71,7 +72,7 @@ export function AlertFeed({
   const [status, setStatus] = useState<StatusFilter>('all');
   const [severity, setSeverity] = useState<SeverityFilter>('all');
 
-  const visible = alerts.filter(
+  const visible = feedOrder(alerts).filter(
     (a) =>
       (status === 'all' || a.status === status) && (severity === 'all' || a.severity === severity),
   );
@@ -99,19 +100,19 @@ export function AlertFeed({
           </h2>
           <p className="panel__subtitle">
             <span className="mono">{openCount}</span> open,{' '}
-            <span className="mono">{alerts.length}</span> total, newest first
+            <span className="mono">{alerts.length}</span> total, most severe open first
           </p>
         </div>
       </header>
       <p className="alert-feed__scale">
-        Severity by modified z-score:{' '}
+        <span>Severity by modified z-score</span>
         {SEVERITIES.slice()
           .reverse()
-          .map((s, i) => (
-            <span key={s} className="alert-feed__threshold">
-              {i > 0 && ' \u00b7 '}
-              <span className={`swatch swatch--${s.toLowerCase()}`} aria-hidden="true" />{' '}
-              {SEVERITY_LABEL[s]} <span className="mono">&ge; {SEVERITY_THRESHOLD[s]}</span>
+          .map((severity) => (
+            <span key={severity} className="alert-feed__threshold">
+              <span className={`swatch swatch--${severity.toLowerCase()}`} aria-hidden="true" />
+              {SEVERITY_LABEL[severity]}{' '}
+              <span className="mono">&ge;{SEVERITY_THRESHOLD[severity]}</span>
             </span>
           ))}
       </p>

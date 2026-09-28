@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { makeAlert, makeHealth, makeStatsPoint, makeStatsSeries } from '../test/fixtures';
 import type { Alert, Health, StatsPoint } from '../types';
-import { backoffDelay, useAlertStream } from './useAlertStream';
+import { backoffDelay, HEALTH_POLL_MS, useAlertStream } from './useAlertStream';
 
 /** Minimal stand-in for the browser WebSocket that tests drive by hand. */
 class MockWebSocket {
@@ -49,7 +49,7 @@ class MockWebSocket {
   }
 }
 
-const health: Health = makeHealth();
+let health: Health = makeHealth();
 
 let backend: { stats: StatsPoint[]; alerts: Alert[] };
 let fetchMock: ReturnType<typeof vi.fn>;
@@ -60,6 +60,7 @@ function respond(body: unknown) {
 
 beforeEach(() => {
   MockWebSocket.instances = [];
+  health = makeHealth();
   backend = { stats: [], alerts: [] };
   fetchMock = vi.fn((input: RequestInfo | URL) => {
     const url = String(input);
@@ -171,6 +172,34 @@ describe('useAlertStream', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     expect(result.current.connection).toBe('live');
     expect(result.current.stats).toHaveLength(1);
+  });
+
+  it('polls /api/health while live and picks up a degraded backend', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const { result } = renderHook(() => useAlertStream('ws://test/ws'));
+    act(() => MockWebSocket.latest().open());
+    await waitFor(() => expect(result.current.health?.status).toBe('ok'));
+
+    // Ingest starts failing; the socket stays up, only health can tell.
+    health = makeHealth({ status: 'degraded', ingest_error: 'PermissionError: logs/app.log' });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(HEALTH_POLL_MS + 50);
+    });
+    expect(result.current.connection).toBe('live');
+    expect(result.current.health).toMatchObject({
+      status: 'degraded',
+      ingest_error: 'PermissionError: logs/app.log',
+    });
+
+    // Once the socket drops, polling stops until the next connect.
+    act(() => MockWebSocket.latest().drop());
+    const healthCalls = () => fetchedPaths().filter((p) => p === '/api/health').length;
+    const before = healthCalls();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(HEALTH_POLL_MS * 2);
+    });
+    // Only reconnect attempts happen (no open), so no further health reads.
+    expect(healthCalls()).toBe(before);
   });
 
   it('stops reconnecting once unmounted', async () => {

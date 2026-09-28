@@ -44,7 +44,13 @@ export function SummaryStrip({ latest, alerts, now, windowSeconds = 60 }: Summar
           <dd>
             <span className="metric__value">{formatPercent(latest?.band_upper)}</span>
             <span className="metric__note">
-              median <span className="mono">{formatPercent(latest?.baseline_median)}</span>
+              {!latest ? null : latest.band_upper == null ? (
+                'learning'
+              ) : (
+                <>
+                  median <span className="mono">{formatPercent(latest.baseline_median)}</span>
+                </>
+              )}
             </span>
           </dd>
         </div>

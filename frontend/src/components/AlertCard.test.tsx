@@ -101,6 +101,29 @@ describe('AlertCard', () => {
     expect(screen.getAllByText(/Acknowledged/).length).toBeGreaterThan(0);
   });
 
+  it('labels the score as a modified z-score and can be jumped to from the headline', () => {
+    render(<AlertCard alert={makeAlert()} now={NOW} />);
+    expect(screen.getByText('Peak modified z-score').nextSibling).toHaveTextContent('9.4');
+    expect(screen.getByRole('article')).toHaveAttribute('id', 'incident-a3f9c2e1');
+  });
+
+  it('labels contributor percentages as shares of window errors', () => {
+    render(<AlertCard alert={makeAlert()} now={NOW} />);
+    expect(screen.getByText('Share of all errors in the window')).toBeInTheDocument();
+  });
+
+  it('shows why an open incident fired and folds it away once resolved', () => {
+    const { container, rerender } = render(<AlertCard alert={makeAlert()} now={NOW} />);
+    expect(container.querySelector('details.alert-card__why')).toHaveAttribute('open');
+    rerender(
+      <AlertCard
+        alert={makeAlert({ status: 'resolved', resolved_at: '2026-09-28T13:06:30Z' })}
+        now={NOW}
+      />,
+    );
+    expect(container.querySelector('details.alert-card__why')).not.toHaveAttribute('open');
+  });
+
   it('marks freshly arrived cards for the entrance animation only', () => {
     const { rerender } = render(<AlertCard alert={makeAlert()} now={NOW} isNew />);
     expect(screen.getByRole('article')).toHaveClass('alert-card--new');

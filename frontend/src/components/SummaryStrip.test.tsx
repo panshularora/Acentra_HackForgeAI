@@ -11,6 +11,13 @@ describe('SummaryStrip', () => {
     expect(rate).toHaveTextContent('\u2014');
   });
 
+  it('shows the edge of normal and the baseline median', () => {
+    render(<SummaryStrip latest={makeStatsPoint()} alerts={[]} now={0} />);
+    const normal = screen.getByText('Normal up to').nextElementSibling;
+    expect(normal).toHaveTextContent('3.1%');
+    expect(normal).toHaveTextContent('median 1.9%');
+  });
+
   it('labels the window with the configured length', () => {
     render(<SummaryStrip latest={makeStatsPoint()} alerts={[]} now={0} windowSeconds={120} />);
 

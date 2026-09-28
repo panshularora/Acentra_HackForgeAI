@@ -55,6 +55,18 @@ export function openIncidents(alerts: readonly Alert[]): Alert[] {
     );
 }
 
+/**
+ * Order for the incident feed: open incidents first (most severe, then
+ * newest), then resolved ones, newest first. The worst live problem is always
+ * at the top, even if a smaller one opened after it.
+ */
+export function feedOrder(alerts: readonly Alert[]): Alert[] {
+  const resolved = alerts
+    .filter((a) => a.status !== 'open')
+    .sort((a, b) => Date.parse(b.opened_at) - Date.parse(a.opened_at));
+  return [...openIncidents(alerts), ...resolved];
+}
+
 export function sceneModel({
   connection,
   monitoring,

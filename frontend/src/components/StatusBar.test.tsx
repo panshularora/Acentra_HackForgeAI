@@ -22,7 +22,7 @@ describe('StatusBar', () => {
     expect(screen.getByRole('status', { name: `Live stream: ${label}` })).toBeInTheDocument();
   });
 
-  it('shows baseline progress and where alerts are delivered', () => {
+  it('shows the product name and baseline progress', () => {
     render(
       <StatusBar
         connection="live"
@@ -32,9 +32,22 @@ describe('StatusBar', () => {
       />,
     );
     expect(screen.getByText('Learning baseline, 2 of 12 buckets')).toBeInTheDocument();
-    expect(screen.getByText('logs/app.log')).toBeInTheDocument();
-    expect(screen.getByText('claimswatch-alerts')).toBeInTheDocument();
-    expect(screen.getByText('/claimswatch/alerts')).toBeInTheDocument();
+    expect(screen.getByText('ClaimsWatch')).toBeInTheDocument();
+  });
+
+  it('replaces the learning badge with "Ingest retrying" while monitoring is degraded', () => {
+    render(
+      <StatusBar
+        connection="live"
+        baseline={{ kind: 'ready', templates: 38 }}
+        health={health}
+        now={0}
+        monitoring={{ kind: 'degraded', error: 'boom' }}
+      />,
+    );
+    expect(screen.getByText('Ingest retrying')).toHaveClass('monitor-badge');
+    expect(screen.queryByText('Monitoring, 38 templates')).not.toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'Live stream: Live' })).toBeInTheDocument();
   });
 });
 

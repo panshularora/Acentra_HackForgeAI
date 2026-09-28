@@ -18,6 +18,11 @@ export default defineConfig({
     },
   },
   build: {
+    // three.js is ~700 kB minified on its own. It ships inside the lazy
+    // DetectorCanvas chunk, which is only requested when the 3D view mounts in
+    // a browser with WebGL, so it never blocks first paint. (A named group
+    // for it would make Vite modulepreload it from index.html.)
+    chunkSizeWarningLimit: 1000,
     rolldownOptions: {
       output: {
         // Keep the charting library in its own long-cacheable chunk.

@@ -100,10 +100,10 @@ export function StatusHero({
           </time>
           , ongoing{' '}
           <span className="mono">{formatDuration(now - Date.parse(alert.opened_at))}</span>. Peak
-          modified z-score <span className="mono">{formatScore(alert.score)}</span>{' '}
+          modified z&#8209;score <span className="mono">{formatScore(alert.score)}</span>{' '}
           <span className="muted">
             ({SEVERITY_LABEL[alert.severity]} at{' '}
-            <span className="mono">&ge; {SEVERITY_THRESHOLD[alert.severity]}</span>)
+            <span className="mono">&ge;{SEVERITY_THRESHOLD[alert.severity]}</span>)
           </span>
           .
         </>

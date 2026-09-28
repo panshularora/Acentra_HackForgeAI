@@ -11,7 +11,7 @@ export const SCENE_PALETTE = {
 export const BASELINE_RING = 1.45;
 /** Rate ring never shrinks below / grows beyond these multiples, so it stays readable. */
 export const RATIO_MIN = 0.2;
-export const RATIO_MAX = 1.65;
+export const RATIO_MAX = 1.5;
 
 export function clampRatio(ratio: number): number {
   return Math.min(RATIO_MAX, Math.max(RATIO_MIN, ratio));

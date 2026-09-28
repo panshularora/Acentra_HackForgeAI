@@ -31,10 +31,38 @@ function renderFeed(props: Partial<Parameters<typeof AlertFeed>[0]> = {}) {
 }
 
 describe('AlertFeed', () => {
-  it('lists alerts newest first', () => {
+  it('lists open alerts before resolved ones', () => {
     renderFeed();
     const headings = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
     expect(headings).toEqual(['Claims DB timeouts', 'Eligibility API 503s']);
+  });
+
+  it('puts the most severe open incident first, then resolved ones by recency', () => {
+    renderFeed({
+      alerts: [
+        makeAlert({
+          id: 'w',
+          severity: 'WARNING',
+          summary: 'Newer warning',
+          opened_at: '2026-09-28T13:08:00Z',
+        }),
+        makeAlert({
+          id: 'c',
+          severity: 'CRITICAL',
+          summary: 'Older critical',
+          opened_at: '2026-09-28T13:05:00Z',
+        }),
+        makeAlert({
+          id: 'r',
+          severity: 'CRITICAL',
+          status: 'resolved',
+          summary: 'Resolved critical',
+          opened_at: '2026-09-28T13:09:00Z',
+        }),
+      ],
+    });
+    const headings = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
+    expect(headings).toEqual(['Older critical', 'Newer warning', 'Resolved critical']);
   });
 
   it('filters by status and severity', async () => {

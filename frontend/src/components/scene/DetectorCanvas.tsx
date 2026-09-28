@@ -87,7 +87,7 @@ function Particles({
 
   return (
     <instancedMesh ref={mesh} args={[undefined, undefined, MAX_PARTICLES]} frustumCulled={false}>
-      <icosahedronGeometry args={[0.028, 1]} />
+      <icosahedronGeometry args={[0.036, 1]} />
       <meshBasicMaterial ref={material} transparent opacity={visual.opacity} toneMapped={false} />
     </instancedMesh>
   );
@@ -297,7 +297,7 @@ export default function DetectorCanvas({
       className="scene__canvas"
       frameloop={frameloop}
       dpr={[1, maxDpr]}
-      camera={{ position: [0, 0.35, 8], fov: 36 }}
+      camera={{ position: [0, 0.3, 8.2], fov: 36 }}
       gl={{ antialias: true, alpha: true, powerPreference: 'low-power' }}
       aria-hidden="true"
     >

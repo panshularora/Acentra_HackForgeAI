@@ -8,10 +8,14 @@ const C = SIZE / 2;
 const BASELINE_R = 88 / RATIO_MAX;
 const DOTS = 42;
 
-/** Deterministic positions (golden-angle spiral) so the picture never jitters between renders. */
+/** Deterministic pseudo-random scatter, so the picture never jitters between renders. */
+const hash = (n: number) => {
+  const x = Math.sin(n * 12.9898) * 43758.5453;
+  return x - Math.floor(x);
+};
 const DOT_POSITIONS = Array.from({ length: DOTS }, (_, i) => {
-  const angle = i * 2.39996;
-  const r = 34 + ((i * 37) % 60);
+  const angle = hash(i + 1) * Math.PI * 2;
+  const r = 30 + hash(i + 101) * 62;
   return { x: C + r * Math.cos(angle), y: C + r * Math.sin(angle) * 0.62, r: 1.3 + (i % 3) * 0.35 };
 });
 
