@@ -21,10 +21,18 @@ import { SeverityBadge } from './SeverityBadge';
 
 const VISIBLE_WINDOW_MS = 10 * 60 * 1000;
 const TICK_INTERVAL_MS = 60 * 1000;
+const TICK_EDGE_GAP_MS = 20 * 1000;
+
+const EMPTY_MESSAGE: Record<ConnectionState, string> = {
+  connecting: 'Connecting to the live stream.',
+  live: `Waiting for the first ${BUCKET_SECONDS}-second bucket from the log tailer.`,
+  reconnecting: 'The backend is unreachable. Retrying automatically.',
+};
 
 interface ChartDatum {
   t: number;
-  rate: number;
+  /** Null when the window held no lines: the rate is undefined, not 0%. */
+  rate: number | null;
   /** [baseline median, band upper] for the ranged area; null while learning. */
   band: [number, number] | null;
   median: number | null;
@@ -41,7 +49,7 @@ function toDatum(point: StatsPoint): ChartDatum {
   const { baseline_median: median, band_upper: upper } = point;
   return {
     t: Date.parse(point.ts),
-    rate: point.error_rate,
+    rate: point.total > 0 ? point.error_rate : null,
     band: median !== null && upper !== null ? [median, upper] : null,
     median,
     point,
@@ -72,15 +80,11 @@ function anomalySpans(data: ChartDatum[]): AnomalySpan[] {
   return spans;
 }
 
+/** Whole-minute ticks, skipping any so close to the left edge that it would collide with 0%. */
 function minuteTicks(start: number, end: number): number[] {
   const ticks: number[] = [];
-  for (
-    let t = Math.ceil(start / TICK_INTERVAL_MS) * TICK_INTERVAL_MS;
-    t <= end;
-    t += TICK_INTERVAL_MS
-  ) {
-    ticks.push(t);
-  }
+  const first = Math.ceil((start + TICK_EDGE_GAP_MS) / TICK_INTERVAL_MS) * TICK_INTERVAL_MS;
+  for (let t = first; t <= end; t += TICK_INTERVAL_MS) ticks.push(t);
   return ticks;
 }
 
@@ -144,7 +148,9 @@ export function ErrorRateChart({ stats, baseline, connection }: ErrorRateChartPr
 
   const end = data[data.length - 1]?.t ?? 0;
   const start = end - VISIBLE_WINDOW_MS;
-  const yAxis = percentAxis(Math.max(0, ...data.map((d) => Math.max(d.rate, d.band?.[1] ?? 0))));
+  const yAxis = percentAxis(
+    Math.max(0, ...data.map((d) => Math.max(d.rate ?? 0, d.band?.[1] ?? 0))),
+  );
   const yDigits = yAxis.ticks.some((t) => Math.round(t * 1000) % 10 !== 0) ? 1 : 0;
   const axisTick = { fill: COLOR.textMuted, fontSize: 11, fontFamily: FONT.mono };
 
@@ -167,7 +173,14 @@ export function ErrorRateChart({ stats, baseline, connection }: ErrorRateChartPr
             Normal range (baseline median to upper bound)
           </li>
           <li>
-            <span className="chart-legend__dot" aria-hidden="true" />
+            <span className="chart-legend__dots" aria-hidden="true">
+              {SEVERITIES.map((severity) => (
+                <span
+                  key={severity}
+                  className={`swatch-dot swatch-dot--${severity.toLowerCase()}`}
+                />
+              ))}
+            </span>
             Anomalous bucket
           </li>
         </ul>
@@ -175,20 +188,16 @@ export function ErrorRateChart({ stats, baseline, connection }: ErrorRateChartPr
 
       <div className="chart-panel__body">
         {data.length === 0 ? (
-          <p className="empty-state">
-            {connection === 'live'
-              ? `Waiting for the first ${BUCKET_SECONDS}-second bucket from the log tailer.`
-              : 'Connecting to the live stream.'}
-          </p>
+          <p className="empty-state">{EMPTY_MESSAGE[connection]}</p>
         ) : (
           <>
-            {baseline.kind === 'learning' && (
+            {(baseline.kind === 'filling' || baseline.kind === 'learning') && (
               <p className="chart-panel__notice" role="status">
                 {describeBaseline(baseline)}. The normal range and alerting start once it is ready.
               </p>
             )}
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={data} margin={{ top: 12, right: 16, bottom: 4, left: 4 }}>
+              <ComposedChart data={data} margin={{ top: 12, right: 24, bottom: 4, left: 4 }}>
                 <CartesianGrid stroke={COLOR.grid} vertical={false} />
                 <XAxis
                   dataKey="t"

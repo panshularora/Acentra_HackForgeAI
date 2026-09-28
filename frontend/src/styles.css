@@ -82,9 +82,13 @@ ul {
 /* ---------- Layout ---------- */
 
 .app {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   height: 100%;
+}
+
+.app > .layout {
+  flex: 1;
 }
 
 .layout {
@@ -232,6 +236,14 @@ ul {
   border-left: 1px solid var(--color-border);
 }
 
+.connection-banner {
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+}
+
 /* ---------- Summary strip ---------- */
 
 .summary-strip__grid {
@@ -371,15 +383,27 @@ ul {
   background: var(--color-band);
 }
 
-.chart-legend__dot {
-  width: 8px;
-  height: 8px;
+.chart-legend__dots {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.swatch-dot {
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
+}
+
+.swatch-dot--warning {
+  background: var(--severity-warning);
+}
+
+.swatch-dot--high {
+  background: var(--severity-high);
+}
+
+.swatch-dot--critical {
   background: var(--severity-critical);
-  box-shadow:
-    -10px 0 0 var(--severity-warning),
-    -5px 0 0 var(--severity-high);
-  margin-left: 10px;
 }
 
 .chart-tooltip {
