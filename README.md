@@ -179,7 +179,7 @@ All settings live in `backend/app/config.py` and can be overridden with environm
 
 The dashboard (`frontend/`, React + TypeScript) keeps one WebSocket open to `/ws`. It plots the 60-second error rate against the learned normal band and shows each incident as a card: a text severity label, the detector that fired, a one-line summary of what broke and where, the log template with its normal band against the observed value and the top extracted parameters, the top services, messages and source IPs, the masked first bad line and sample log lines, SNS and CloudWatch delivery status with the SNS message ID, and an Acknowledge button. If the connection drops, a banner says the data is stale and the dashboard reconnects with backoff, reloading history each time, so a refresh or a backend restart never leaves a gap. Colour is used only for severity, which is always also written as text.
 
-Window length, bucket size and baseline warm-up are read from `/api/health`, so the labels follow the backend configuration. The frontend requires Node 22 or newer; see [frontend/README.md](frontend/README.md) for commands and structure.
+Window length, bucket size and baseline warm-up are read from `/api/health`, so the labels follow the backend configuration. A neutral badge in the header says whether the detector is still learning its baseline ("Learning baseline, 4 of 6 buckets") or monitoring ("Monitoring, 38 templates"), from the `learning` object on each stats bucket, or from `/api/health` before the first bucket arrives; until the baseline is learned, the dashboard says that no alerts can fire yet. The frontend requires Node 22 or newer; see [frontend/README.md](frontend/README.md) for commands and structure.
 
 ## How we built this
 
