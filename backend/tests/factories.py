@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 
-from app.models import LogEvent
+from app.models import Alert, Contributor, LogEvent, Severity, TopContributors
 
 T0 = datetime(2026, 9, 28, 13, 0, 0, tzinfo=UTC)
 
@@ -25,3 +25,25 @@ def make_event(
         source_ip=source_ip,
         http_status=http_status,
     )
+
+
+def make_alert(alert_id: str = "a1", **overrides: object) -> Alert:
+    """Build an open CRITICAL alert; any field can be overridden."""
+    fields: dict[str, object] = {
+        "id": alert_id,
+        "status": "open",
+        "severity": Severity.CRITICAL,
+        "score": 9.4,
+        "error_rate": 0.31,
+        "baseline_median": 0.02,
+        "opened_at": T0,
+        "updated_at": T0,
+        "summary": "94% of errors come from claim-adjudication: DB connection timeout",
+        "top_contributors": TopContributors(
+            services=[Contributor("claim-adjudication", 212, 0.94)],
+            messages=[Contributor("DB connection timeout", 200, 0.89)],
+        ),
+        "sample_lines": ["2026-09-28T13:00:00Z ERROR claim-adjudication member_id=<MEMBER_ID>"],
+    }
+    fields.update(overrides)
+    return Alert(**fields)  # type: ignore[arg-type]

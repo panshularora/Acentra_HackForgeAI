@@ -1,0 +1,2 @@
+# Lets ruff find the project settings when run from the repository root (e.g. on tools/).
+extend = "backend/pyproject.toml"
