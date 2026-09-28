@@ -46,6 +46,8 @@ flowchart LR
 
 The backend is one FastAPI process. The detector is pure Python with no I/O, so the live pipeline and the replay benchmark run exactly the same code. See [docs/architecture.md](docs/architecture.md) for the data flow and the full REST/WebSocket contract, and [docs/decisions.md](docs/decisions.md) for why it is built this way.
 
+**Documentation:** [docs/ROADMAP.md](docs/ROADMAP.md) lists what is left to implement and further improvements.
+
 ## How detection works
 
 No machine-learning model: every alert comes from a robust statistic that can be explained in one sentence.
