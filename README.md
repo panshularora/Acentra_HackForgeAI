@@ -114,7 +114,7 @@ make replay     # detection latency and false alarms on a known scenario
 cd frontend && npm test
 ```
 
-The backend suite has 140 tests, one file per module, including moto-backed AWS delivery tests and an end-to-end WebSocket test that writes lines to a real log file and receives the resulting stats and alert messages.
+The backend suite has 144 tests, one file per module, including moto-backed AWS delivery tests and an end-to-end WebSocket test that writes lines to a real log file and receives the resulting stats and alert messages.
 
 ## Project structure
 
