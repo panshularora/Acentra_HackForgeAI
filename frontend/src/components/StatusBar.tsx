@@ -10,6 +10,12 @@ const CONNECTION_LABEL: Record<ConnectionState, string> = {
   reconnecting: 'Reconnecting',
 };
 
+const CONNECTION_TEXT: Record<ConnectionState, string> = {
+  connecting: 'Connecting\u2026',
+  live: 'Live',
+  reconnecting: 'Reconnecting\u2026',
+};
+
 interface StatusBarProps {
   connection: ConnectionState;
   baseline: BaselineState;
@@ -31,8 +37,7 @@ export function StatusBar({ connection, baseline, health, now }: StatusBarProps)
           aria-label={`Live stream: ${CONNECTION_LABEL[connection]}`}
         >
           <span className="connection__dot" aria-hidden="true" />
-          {CONNECTION_LABEL[connection]}
-          {connection !== 'live' && <span aria-hidden="true">&hellip;</span>}
+          {CONNECTION_TEXT[connection]}
         </span>
         <span
           className={`status-bar__baseline status-bar__baseline--${baseline.kind}`}

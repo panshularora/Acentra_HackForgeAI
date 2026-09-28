@@ -371,15 +371,27 @@ ul {
   background: var(--color-band);
 }
 
-.chart-legend__dot {
-  width: 8px;
-  height: 8px;
+.chart-legend__dots {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.swatch-dot {
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
+}
+
+.swatch-dot--warning {
+  background: var(--severity-warning);
+}
+
+.swatch-dot--high {
+  background: var(--severity-high);
+}
+
+.swatch-dot--critical {
   background: var(--severity-critical);
-  box-shadow:
-    -10px 0 0 var(--severity-warning),
-    -5px 0 0 var(--severity-high);
-  margin-left: 10px;
 }
 
 .chart-tooltip {

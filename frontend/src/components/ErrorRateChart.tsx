@@ -167,7 +167,14 @@ export function ErrorRateChart({ stats, baseline, connection }: ErrorRateChartPr
             Normal range (baseline median to upper bound)
           </li>
           <li>
-            <span className="chart-legend__dot" aria-hidden="true" />
+            <span className="chart-legend__dots" aria-hidden="true">
+              {SEVERITIES.map((severity) => (
+                <span
+                  key={severity}
+                  className={`swatch-dot swatch-dot--${severity.toLowerCase()}`}
+                />
+              ))}
+            </span>
             Anomalous bucket
           </li>
         </ul>
