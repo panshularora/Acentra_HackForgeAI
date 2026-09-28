@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     # Baseline: how many closed buckets form "normal", and how many are needed
     # before we trust it enough to raise alerts.
     baseline_buckets: int = Field(default=30, ge=3)
-    baseline_min_buckets: int = Field(default=12, ge=3)
+    baseline_min_buckets: int = Field(default=6, ge=3)
 
     # Guards against alerting on tiny samples (3 errors out of 5 lines is 60%
     # but tells us nothing).
