@@ -104,7 +104,7 @@ Then `make incident-db`, `make incident-auth`, `make sns-tail` and `make feed` (
 
 ## Demo
 
-[docs/demo-script.md](docs/demo-script.md) is the rehearsed three-minute walk-through: calm baseline, database outage (HIGH escalating to CRITICAL, with what broke and where), credential stuffing (CRITICAL naming the source IP), masking and SNS read-back, and the replay numbers.
+[docs/demo-script.md](docs/demo-script.md) is the rehearsed three-minute walk-through: calm baseline, database outage (escalating to CRITICAL, with what broke and where), credential stuffing (CRITICAL naming the source IP), masking and SNS read-back, and the replay numbers.
 
 ## Tests
 
@@ -114,7 +114,7 @@ make replay     # detection latency and false alarms on a known scenario
 cd frontend && npm test
 ```
 
-The backend suite has 144 tests, one file per module, including moto-backed AWS delivery tests and an end-to-end WebSocket test that writes lines to a real log file and receives the resulting stats and alert messages.
+The backend suite has 146 tests, one file per module, including moto-backed AWS delivery tests and an end-to-end WebSocket test that writes lines to a real log file and receives the resulting stats and alert messages.
 
 ## Project structure
 

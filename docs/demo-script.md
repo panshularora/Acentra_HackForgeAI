@@ -50,7 +50,8 @@ While it runs:
 > "Claim adjudication just lost its database. Watch the error-rate line."
 
 Within 10 to 20 seconds the line leaves the band and an alert slides in,
-usually HIGH first, escalating to CRITICAL as the outage continues.
+at WARNING or HIGH, escalating to CRITICAL within about 30 seconds as the
+outage fills the window.
 
 Point at the card:
 
@@ -71,7 +72,8 @@ make incident-auth      # one IP hammers member-auth with stolen passwords
 > "Different failure: someone is trying stolen passwords against member
 > login."
 
-A CRITICAL alert appears within about 10 seconds:
+An alert naming the source IP appears within about 10 seconds and reaches
+CRITICAL within about 20:
 
 > "It names the attacker: '… failed logins from 10.4.2.17 in the last 60
 > seconds'. The security team can block that IP straight from the alert."
