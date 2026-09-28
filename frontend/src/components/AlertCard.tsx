@@ -22,10 +22,12 @@ function ContributorGroup({
   label,
   items,
   mono = false,
+  wrap = false,
 }: {
   label: string;
   items: Contributor[];
   mono?: boolean;
+  wrap?: boolean;
 }) {
   if (items.length === 0) return null;
   return (
@@ -34,7 +36,12 @@ function ContributorGroup({
       <ul className="contributors__list">
         {items.slice(0, MAX_CONTRIBUTORS).map((item) => (
           <li key={item.value} className="contributor">
-            <span className={`contributor__value${mono ? ' mono' : ''}`} title={item.value}>
+            <span
+              className={['contributor__value', mono && 'mono', wrap && 'contributor__value--wrap']
+                .filter(Boolean)
+                .join(' ')}
+              title={item.value}
+            >
               <MaskedText text={item.value} />
             </span>
             <span className="contributor__share mono">{formatPercent(item.share, 0)}</span>
@@ -157,7 +164,7 @@ export function AlertCard({ alert, now, isNew = false, onAcknowledge }: AlertCar
 
       <div className="contributors">
         <ContributorGroup label="Service" items={services} />
-        <ContributorGroup label="Error message" items={messages} mono />
+        <ContributorGroup label="Error message" items={messages} mono wrap />
         <ContributorGroup label="Source IP" items={sourceIps} mono />
       </div>
 

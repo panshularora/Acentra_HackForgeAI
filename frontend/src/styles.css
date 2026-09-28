@@ -553,6 +553,12 @@ ul {
   white-space: nowrap;
 }
 
+/* Error messages are the most telling contributor; let them wrap. */
+.contributor__value--wrap {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .contributor__share {
   text-align: right;
   color: var(--color-text-muted);
@@ -594,7 +600,8 @@ ul {
 
 .samples__lines code {
   font-family: inherit;
-  white-space: pre;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .masked-token {
@@ -868,9 +875,17 @@ ul {
     gap: var(--space-3);
   }
 
+  .status-bar__item:not(.status-bar__clock) {
+    display: none;
+  }
+
   .status-bar__clock {
     padding-left: 0;
     border-left: 0;
+  }
+
+  .alert-card__facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .summary-strip__grid {
