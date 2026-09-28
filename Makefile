@@ -6,7 +6,7 @@ BIN     := $(VENV)/bin
 RATE    ?= 40
 
 .DEFAULT_GOAL := help
-.PHONY: help install dev test lint format typecheck check loggen incident-db incident-auth incident-new incident-silence incident-flow replay moto feed sns-tail dashboard demo clean
+.PHONY: help install dev test lint format typecheck check loggen incident-db incident-auth incident-new incident-silence incident-flow replay benchmark moto feed sns-tail dashboard demo clean
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-14s %s\n", $$1, $$2}'
@@ -59,6 +59,9 @@ incident-flow: ## Stop adjudicating validated claims for 60 s (needs `make logge
 
 replay: ## Replay a known scenario and print detection latency and false alarms
 	PYTHONPATH=backend $(BIN)/python tools/replay.py
+
+benchmark: ## Control vs template-aware detector on seeded replays; writes docs/benchmark.*
+	PYTHONPATH=backend $(BIN)/python tools/benchmark.py --out-dir docs
 
 moto: ## Run the local AWS emulator (SNS, CloudWatch Logs, SQS) on :5000
 	$(BIN)/moto_server -p 5000
