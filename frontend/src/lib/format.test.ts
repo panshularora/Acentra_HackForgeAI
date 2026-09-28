@@ -3,6 +3,7 @@ import {
   formatClock,
   formatCount,
   formatDuration,
+  formatMeasure,
   formatMultiple,
   formatPercent,
   formatRelative,
@@ -45,6 +46,27 @@ describe('formatMultiple', () => {
     expect(formatMultiple(0.02, 0.02)).toBeNull();
     expect(formatMultiple(0.3, 0)).toBeNull();
     expect(formatMultiple(0.3, null)).toBeNull();
+  });
+});
+
+describe('formatMeasure', () => {
+  it('keeps whole numbers whole, with thousands separators', () => {
+    expect(formatMeasure(212)).toBe('212');
+    expect(formatMeasure(1204)).toBe('1,204');
+    expect(formatMeasure(0)).toBe('0');
+  });
+
+  it('keeps one decimal for fractions, two below 1', () => {
+    expect(formatMeasure(42.5)).toBe('42.5');
+    expect(formatMeasure(4.04)).toBe('4');
+    expect(formatMeasure(0.25)).toBe('0.25');
+    expect(formatMeasure(312.7)).toBe('313');
+  });
+
+  it('shows a dash for missing values', () => {
+    expect(formatMeasure(null)).toBe('\u2014');
+    expect(formatMeasure(undefined)).toBe('\u2014');
+    expect(formatMeasure(Number.NaN)).toBe('\u2014');
   });
 });
 

@@ -517,6 +517,19 @@ ul {
   color: var(--color-text-muted);
 }
 
+.detector-label {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
 .alert-card__id {
   margin-left: auto;
   color: var(--color-text-muted);
@@ -528,6 +541,71 @@ ul {
   font-weight: 600;
   line-height: 1.35;
   letter-spacing: -0.005em;
+}
+
+.alert-card__explain {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--space-1) var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  font-size: var(--text-sm);
+}
+
+.alert-card__explain > div {
+  display: contents;
+}
+
+.alert-card__explain dt {
+  padding-top: 1px;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  letter-spacing: 0.02em;
+}
+
+.alert-card__explain dd {
+  min-width: 0;
+}
+
+.alert-card__template {
+  overflow-wrap: anywhere;
+}
+
+.alert-card__band {
+  color: var(--color-text-muted);
+}
+
+.alert-card__band .mono {
+  color: var(--color-text);
+}
+
+.alert-card__band .alert-card__observed {
+  font-weight: 600;
+}
+
+.param-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+}
+
+.param {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.param__name,
+.param__share {
+  color: var(--color-text-muted);
+}
+
+.template-wildcard {
+  padding: 0 2px;
+  border-radius: 2px;
+  background: var(--color-border);
+  color: var(--color-text-muted);
 }
 
 .alert-card__facts {
@@ -620,6 +698,18 @@ ul {
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   line-height: 1.6;
+}
+
+.samples__label {
+  margin-top: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.samples__label + .samples__lines {
+  margin-top: var(--space-1);
 }
 
 .samples__lines code {

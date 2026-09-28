@@ -1,4 +1,4 @@
-import type { DetectorTiming, Health, StatsPoint } from '../types';
+import type { DetectorKind, DetectorTiming, Health, StatsPoint } from '../types';
 
 /**
  * Fallback used until /api/health answers. Matches the backend defaults in
@@ -68,4 +68,24 @@ export function describeBaseline(
     case 'ready':
       return 'Baseline ready';
   }
+}
+
+/** Short labels for the contract v2 detectors, as shown on alert cards. */
+export const DETECTOR_LABEL: Record<DetectorKind, string> = {
+  error_spike: 'Error spike',
+  silence: 'Silence',
+  new_pattern: 'New pattern',
+  flow_break: 'Flow break',
+};
+
+/**
+ * Label for Alert.detector, or null when the backend did not send one. A kind
+ * this build does not know yet is shown humanised ("rate_drop" -> "Rate drop")
+ * rather than hidden, so a newer backend still explains itself.
+ */
+export function detectorLabel(kind: string | null | undefined): string | null {
+  if (!kind) return null;
+  if (Object.hasOwn(DETECTOR_LABEL, kind)) return DETECTOR_LABEL[kind as DetectorKind];
+  const words = kind.replace(/_/g, ' ').trim();
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : null;
 }
