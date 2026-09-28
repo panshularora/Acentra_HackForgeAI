@@ -1,0 +1,301 @@
+{
+  "runs": [
+    {
+      "seed": 2026,
+      "lines": 48363,
+      "false_alarms": 0,
+      "incidents": [
+        {
+          "kind": "db-outage",
+          "start_s": 480,
+          "detected": true,
+          "latency_s": 20.0,
+          "opened_severity": "HIGH",
+          "opened_summary": "71% of errors come from claim-adjudication: DB connection timeout",
+          "peak_severity": "CRITICAL",
+          "peak_score": 16.4,
+          "peak_error_rate": 0.07083498219232291,
+          "peak_baseline_median": 0.02225846144989692,
+          "peak_summary": "82% of errors come from claim-adjudication: DB connection timeout"
+        },
+        {
+          "kind": "cred-stuffing",
+          "start_s": 840,
+          "detected": true,
+          "latency_s": 10.0,
+          "opened_severity": "HIGH",
+          "opened_summary": "62 failed logins from 10.4.2.17 in the last 60s",
+          "peak_severity": "CRITICAL",
+          "peak_score": 23.1,
+          "peak_error_rate": 0.08844834159359512,
+          "peak_baseline_median": 0.020092145066717127,
+          "peak_summary": "179 failed logins from 10.4.2.17 in the last 60s"
+        }
+      ]
+    },
+    {
+      "seed": 1,
+      "lines": 48398,
+      "false_alarms": 0,
+      "incidents": [
+        {
+          "kind": "db-outage",
+          "start_s": 480,
+          "detected": true,
+          "latency_s": 20.0,
+          "opened_severity": "HIGH",
+          "opened_summary": "67% of errors come from claim-adjudication: DB connection timeout",
+          "peak_severity": "CRITICAL",
+          "peak_score": 15.8,
+          "peak_error_rate": 0.07600477516912058,
+          "peak_baseline_median": 0.021515906917619093,
+          "peak_summary": "79% of errors come from claim-adjudication: DB connection timeout"
+        },
+        {
+          "kind": "cred-stuffing",
+          "start_s": 840,
+          "detected": true,
+          "latency_s": 10.0,
+          "opened_severity": "CRITICAL",
+          "opened_summary": "62 failed logins from 10.4.2.17 in the last 60s",
+          "peak_severity": "CRITICAL",
+          "peak_score": 23.7,
+          "peak_error_rate": 0.09028831562974203,
+          "peak_baseline_median": 0.020156368845017848,
+          "peak_summary": "185 failed logins from 10.4.2.17 in the last 60s"
+        }
+      ]
+    },
+    {
+      "seed": 2,
+      "lines": 48253,
+      "false_alarms": 0,
+      "incidents": [
+        {
+          "kind": "db-outage",
+          "start_s": 480,
+          "detected": true,
+          "latency_s": 20.0,
+          "opened_severity": "HIGH",
+          "opened_summary": "68% of errors come from claim-adjudication: DB connection timeout",
+          "peak_severity": "CRITICAL",
+          "peak_score": 16.8,
+          "peak_error_rate": 0.07162534435261708,
+          "peak_baseline_median": 0.021844159061816082,
+          "peak_summary": "85% of errors come from claim-adjudication: DB connection timeout"
+        },
+        {
+          "kind": "cred-stuffing",
+          "start_s": 840,
+          "detected": true,
+          "latency_s": 10.0,
+          "opened_severity": "HIGH",
+          "opened_summary": "59 failed logins from 10.4.2.17 in the last 60s",
+          "peak_severity": "CRITICAL",
+          "peak_score": 21.6,
+          "peak_error_rate": 0.08506468051744413,
+          "peak_baseline_median": 0.020904255252747306,
+          "peak_summary": "177 failed logins from 10.4.2.17 in the last 60s"
+        }
+      ]
+    },
+    {
+      "seed": 3,
+      "lines": 48151,
+      "false_alarms": 0,
+      "incidents": [
+        {
+          "kind": "db-outage",
+          "start_s": 480,
+          "detected": true,
+          "latency_s": 10.0,
+          "opened_severity": "WARNING",
+          "opened_summary": "46% of errors come from claim-adjudication: DB connection timeout",
+          "peak_severity": "CRITICAL",
+          "peak_score": 17.5,
+          "peak_error_rate": 0.07255776246453181,
+          "peak_baseline_median": 0.020554656620952728,
+          "peak_summary": "80% of errors come from claim-adjudication: DB connection timeout"
+        },
+        {
+          "kind": "cred-stuffing",
+          "start_s": 840,
+          "detected": true,
+          "latency_s": 10.0,
+          "opened_severity": "HIGH",
+          "opened_summary": "59 failed logins from 10.4.2.17 in the last 60s",
+          "peak_severity": "CRITICAL",
+          "peak_score": 22.8,
+          "peak_error_rate": 0.08620689655172414,
+          "peak_baseline_median": 0.018654432960845742,
+          "peak_summary": "177 failed logins from 10.4.2.17 in the last 60s"
+        }
+      ]
+    },
+    {
+      "seed": 4,
+      "lines": 48287,
+      "false_alarms": 0,
+      "incidents": [
+        {
+          "kind": "db-outage",
+          "start_s": 480,
+          "detected": true,
+          "latency_s": 10.0,
+          "opened_severity": "WARNING",
+          "opened_summary": "57% of errors come from claim-adjudication: DB connection timeout",
+          "peak_severity": "CRITICAL",
+          "peak_score": 16.7,
+          "peak_error_rate": 0.07261904761904762,
+          "peak_baseline_median": 0.022957186192697723,
+          "peak_summary": "78% of errors come from claim-adjudication: DB connection timeout"
+        },
+        {
+          "kind": "cred-stuffing",
+          "start_s": 840,
+          "detected": true,
+          "latency_s": 10.0,
+          "opened_severity": "CRITICAL",
+          "opened_summary": "63 failed logins from 10.4.2.17 in the last 60s",
+          "peak_severity": "CRITICAL",
+          "peak_score": 25.7,
+          "peak_error_rate": 0.09687379390196835,
+          "peak_baseline_median": 0.020640328184163552,
+          "peak_summary": "187 failed logins from 10.4.2.17 in the last 60s"
+        }
+      ]
+    },
+    {
+      "seed": 5,
+      "lines": 48400,
+      "false_alarms": 0,
+      "incidents": [
+        {
+          "kind": "db-outage",
+          "start_s": 480,
+          "detected": true,
+          "latency_s": 20.0,
+          "opened_severity": "HIGH",
+          "opened_summary": "71% of errors come from claim-adjudication: DB connection timeout",
+          "peak_severity": "CRITICAL",
+          "peak_score": 18.2,
+          "peak_error_rate": 0.07686243594797004,
+          "peak_baseline_median": 0.023003020230482393,
+          "peak_summary": "81% of errors come from claim-adjudication: DB connection timeout"
+        },
+        {
+          "kind": "cred-stuffing",
+          "start_s": 840,
+          "detected": true,
+          "latency_s": 10.0,
+          "opened_severity": "CRITICAL",
+          "opened_summary": "66 failed logins from 10.4.2.17 in the last 60s",
+          "peak_severity": "CRITICAL",
+          "peak_score": 24.6,
+          "peak_error_rate": 0.09112058937572702,
+          "peak_baseline_median": 0.018105584143319992,
+          "peak_summary": "185 failed logins from 10.4.2.17 in the last 60s"
+        }
+      ]
+    },
+    {
+      "seed": 6,
+      "lines": 48310,
+      "false_alarms": 0,
+      "incidents": [
+        {
+          "kind": "db-outage",
+          "start_s": 480,
+          "detected": true,
+          "latency_s": 20.0,
+          "opened_severity": "HIGH",
+          "opened_summary": "74% of errors come from claim-adjudication: DB connection timeout",
+          "peak_severity": "CRITICAL",
+          "peak_score": 15.3,
+          "peak_error_rate": 0.07103174603174603,
+          "peak_baseline_median": 0.0191870794738095,
+          "peak_summary": "79% of errors come from claim-adjudication: DB connection timeout"
+        },
+        {
+          "kind": "cred-stuffing",
+          "start_s": 840,
+          "detected": true,
+          "latency_s": 10.0,
+          "opened_severity": "CRITICAL",
+          "opened_summary": "61 failed logins from 10.4.2.17 in the last 60s",
+          "peak_severity": "CRITICAL",
+          "peak_score": 25.0,
+          "peak_error_rate": 0.09287925696594428,
+          "peak_baseline_median": 0.018614778842367764,
+          "peak_summary": "183 failed logins from 10.4.2.17 in the last 60s"
+        }
+      ]
+    },
+    {
+      "seed": 7,
+      "lines": 48215,
+      "false_alarms": 0,
+      "incidents": [
+        {
+          "kind": "db-outage",
+          "start_s": 480,
+          "detected": true,
+          "latency_s": 20.0,
+          "opened_severity": "CRITICAL",
+          "opened_summary": "66% of errors come from claim-adjudication: DB connection timeout",
+          "peak_severity": "CRITICAL",
+          "peak_score": 18.9,
+          "peak_error_rate": 0.07639726578206675,
+          "peak_baseline_median": 0.020488595955629657,
+          "peak_summary": "78% of errors come from claim-adjudication: DB connection timeout"
+        },
+        {
+          "kind": "cred-stuffing",
+          "start_s": 840,
+          "detected": true,
+          "latency_s": 10.0,
+          "opened_severity": "HIGH",
+          "opened_summary": "60 failed logins from 10.4.2.17 in the last 60s",
+          "peak_severity": "CRITICAL",
+          "peak_score": 21.5,
+          "peak_error_rate": 0.08462732919254658,
+          "peak_baseline_median": 0.020442222998854082,
+          "peak_summary": "177 failed logins from 10.4.2.17 in the last 60s"
+        }
+      ]
+    },
+    {
+      "seed": 8,
+      "lines": 48373,
+      "false_alarms": 0,
+      "incidents": [
+        {
+          "kind": "db-outage",
+          "start_s": 480,
+          "detected": true,
+          "latency_s": 20.0,
+          "opened_severity": "HIGH",
+          "opened_summary": "68% of errors come from claim-adjudication: DB connection timeout",
+          "peak_severity": "CRITICAL",
+          "peak_score": 15.2,
+          "peak_error_rate": 0.07171314741035857,
+          "peak_baseline_median": 0.022235766290196857,
+          "peak_summary": "82% of errors come from claim-adjudication: DB connection timeout"
+        },
+        {
+          "kind": "cred-stuffing",
+          "start_s": 840,
+          "detected": true,
+          "latency_s": 10.0,
+          "opened_severity": "CRITICAL",
+          "opened_summary": "59 failed logins from 10.4.2.17 in the last 60s",
+          "peak_severity": "CRITICAL",
+          "peak_score": 24.3,
+          "peak_error_rate": 0.0903755868544601,
+          "peak_baseline_median": 0.018409320259665927,
+          "peak_summary": "179 failed logins from 10.4.2.17 in the last 60s"
+        }
+      ]
+    }
+  ]
+}

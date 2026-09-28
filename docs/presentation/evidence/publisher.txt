@@ -1,0 +1,14 @@
+{
+  "alert_id": "6d96f476",
+  "delivery": {
+    "sns": {
+      "status": "sent",
+      "message_id": "95cf7d28-420e-40d7-9b49-89e703c1bc78",
+      "error": null
+    },
+    "cloudwatch": {
+      "status": "sent",
+      "error": null
+    }
+  }
+}
