@@ -32,6 +32,9 @@ logger = logging.getLogger(__name__)
 # worth paging someone about.
 PUBLISHED_CHANGES = frozenset({AlertChange.OPENED, AlertChange.ESCALATED, AlertChange.RESOLVED})
 
+INGEST_RETRY_MIN_SECONDS = 1.0
+INGEST_RETRY_MAX_SECONDS = 30.0
+
 
 class AlertSink(Protocol):
     """Something that delivers alerts outside the process (see ``alerts.publisher``)."""
@@ -67,12 +70,23 @@ class Pipeline:
         self._clock = clock
         self._sleep = sleep
         self._last_boundary: float | None = None
+        # Why the log could not be read on the last attempt; None while reading works.
+        self.ingest_error: str | None = None
+        self.stopped = False
+
+    @property
+    def healthy(self) -> bool:
+        """True while both loops are running and the log file is readable."""
+        return not self.stopped and self.ingest_error is None
 
     async def run(self) -> None:
         """Run until cancelled."""
-        async with asyncio.TaskGroup() as group:
-            group.create_task(self._ingest_loop(), name="ingest")
-            group.create_task(self._clock_loop(), name="bucket-clock")
+        try:
+            async with asyncio.TaskGroup() as group:
+                group.create_task(self._ingest_loop(), name="ingest")
+                group.create_task(self._clock_loop(), name="bucket-clock")
+        finally:
+            self.stopped = True
 
     async def close_bucket(self, end: datetime) -> DetectionResult:
         """Close the current bucket at ``end`` and publish the results."""
@@ -106,11 +120,35 @@ class Pipeline:
             self.sink.submit(AlertEvent(change, stored))
 
     async def _ingest_loop(self) -> None:
-        async for lines in self.tailer.follow():
+        """Poll the log forever; a read failure is retried with backoff, never fatal."""
+        retry_delay = INGEST_RETRY_MIN_SECONDS
+        while True:
+            try:
+                lines = self.tailer.read_lines()
+            except Exception as error:
+                if self.ingest_error is None:
+                    logger.exception("cannot read %s; retrying", self.tailer.path)
+                self.ingest_error = f"{type(error).__name__}: {error}"
+                self.tailer.close()
+                await self._sleep(retry_delay)
+                retry_delay = min(retry_delay * 2, INGEST_RETRY_MAX_SECONDS)
+                continue
+            if self.ingest_error is not None:
+                logger.info("reading %s again", self.tailer.path)
+                self.ingest_error = None
+            retry_delay = INGEST_RETRY_MIN_SECONDS
             for line in lines:
-                event = self.parser.parse(line)
-                if event is not None:
-                    self.detector.observe(event)
+                self._ingest_line(line)
+            await self._sleep(self.tailer.poll_interval)
+
+    def _ingest_line(self, line: str) -> None:
+        try:
+            event = self.parser.parse(line)
+            if event is not None:
+                self.detector.observe(event)
+        except Exception:
+            # One line that breaks the parser or detector must not stop monitoring.
+            logger.exception("dropped a log line that failed to process")
 
     async def _clock_loop(self) -> None:
         while True:

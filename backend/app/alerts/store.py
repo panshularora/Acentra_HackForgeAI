@@ -107,6 +107,20 @@ class AlertStore:
         assert stored is not None
         return stored
 
+    def resolve_stale_open(self, now: datetime) -> int:
+        """Resolve incidents a previous process left open and return how many.
+
+        Detection state lives in memory, so nothing in this process would ever
+        close them; left alone they would count as open forever.
+        """
+        with self._db:
+            cursor = self._db.execute(
+                "UPDATE alerts SET status = 'resolved', resolved_at = ?, updated_at = ? "
+                "WHERE status = 'open'",
+                (to_iso(now), to_iso(now)),
+            )
+        return cursor.rowcount
+
     def set_delivery(self, alert_id: str, delivery: Delivery) -> Alert | None:
         """Record AWS delivery state; return the updated alert, or None if unknown."""
         return self._update(alert_id, "delivery = ?", json.dumps(delivery.to_dict()))

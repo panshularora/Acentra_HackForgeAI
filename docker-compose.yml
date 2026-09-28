@@ -5,6 +5,7 @@
 #
 # Host ports default to 5173 (dashboard), 8000 (API) and 5000 (moto). If one is
 # taken, override it, e.g. FRONTEND_PORT=8080 BACKEND_PORT=18000 docker compose up --build
+# Ports bind to 127.0.0.1 only: the API has no login, so it stays off shared networks.
 #
 # Inject incidents into the running log generator:
 #   docker compose exec loggen python tools/loggen.py --incident db-outage --duration 45
@@ -26,7 +27,7 @@ services:
     # Local AWS emulator (SNS, SQS, CloudWatch Logs). No AWS account needed.
     image: motoserver/moto:5.2.3
     ports:
-      - "${MOTO_PORT:-5000}:5000"
+      - "127.0.0.1:${MOTO_PORT:-5000}:5000"
     healthcheck:
       test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:5000/moto-api/"]
       interval: 5s
@@ -48,7 +49,7 @@ services:
       - logs:/app/logs
       - data:/app/data
     ports:
-      - "${BACKEND_PORT:-8000}:8000"
+      - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
     depends_on:
       moto:
         condition: service_healthy
@@ -71,7 +72,7 @@ services:
     build: ./frontend
     image: claimswatch-frontend
     ports:
-      - "${FRONTEND_PORT:-5173}:80"
+      - "127.0.0.1:${FRONTEND_PORT:-5173}:80"
     depends_on:
       backend:
         condition: service_healthy

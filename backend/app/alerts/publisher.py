@@ -48,7 +48,7 @@ logger = logging.getLogger(__name__)
 DeliveryCallback = Callable[[str, Delivery], Awaitable[None]]
 
 AWS_ERRORS = (BotoCoreError, ClientError)
-SNS_SUBJECT_LIMIT = 100
+SNS_SUBJECT_LIMIT = 99  # SNS: "must be less than 100 characters"
 # Fail fast: a paging path that hangs for a minute is worse than one that
 # reports "failed" in two seconds and lets the dashboard show it.
 BOTO_CONFIG = Config(connect_timeout=2, read_timeout=5, retries={"max_attempts": 2})
@@ -108,9 +108,14 @@ def email_text(event: AlertEvent, app_name: str) -> str:
 
 
 def sns_subject(alert: Alert, app_name: str) -> str:
-    """Short e-mail/SMS friendly subject, within SNS's 100 character limit."""
+    """Short e-mail/SMS friendly subject that SNS accepts.
+
+    SNS rejects subjects with line breaks, control characters or non-ASCII
+    text, and anything 100 characters or longer.
+    """
     prefix = "RESOLVED" if alert.status == "resolved" else alert.severity.value
-    subject = f"[{prefix}] {app_name}: {alert.summary}"
+    raw = f"[{prefix}] {app_name}: {alert.summary}"
+    subject = " ".join("".join(c if c.isascii() and c.isprintable() else " " for c in raw).split())
     return (
         subject if len(subject) <= SNS_SUBJECT_LIMIT else subject[: SNS_SUBJECT_LIMIT - 3] + "..."
     )

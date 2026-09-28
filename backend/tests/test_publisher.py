@@ -165,8 +165,14 @@ def test_subject_fits_sns_limit_and_marks_resolution() -> None:
     long_alert = make_alert(summary="x" * 300)
     resolved = make_alert(status="resolved")
 
-    assert len(sns_subject(long_alert, "ClaimsWatch")) == 100
+    assert len(sns_subject(long_alert, "ClaimsWatch")) == 99
     assert sns_subject(resolved, "ClaimsWatch").startswith("[RESOLVED] ")
+
+
+def test_subject_has_no_line_breaks_control_or_non_ascii_characters() -> None:
+    alert = make_alert(summary="DB timeout\nin\tclaims\x07 \u2014 retry\r\n")
+
+    assert sns_subject(alert, "ClaimsWatch") == "[CRITICAL] ClaimsWatch: DB timeout in claims retry"
 
 
 def test_existing_topic_arn_is_used_without_creating_a_topic(aws: None) -> None:

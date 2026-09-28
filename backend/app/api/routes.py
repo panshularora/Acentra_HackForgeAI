@@ -2,7 +2,7 @@
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, WebSocket
 from starlette.websockets import WebSocketDisconnect
 
 from app.detection.detector import DETECTORS
@@ -21,9 +21,16 @@ ServicesDep = Annotated[Services, Depends(get_services)]
 
 
 @router.get("/health", include_in_schema=False)
-def liveness() -> dict[str, str]:
-    """Minimal liveness probe for load balancers and container health checks."""
-    return {"status": "ok"}
+def liveness(services: ServicesDep, response: Response) -> dict[str, str]:
+    """Liveness probe for load balancers and container health checks.
+
+    Returns 503 when the pipeline has stopped or cannot read the log, so a
+    dead monitor fails its health check instead of looking fine.
+    """
+    if services.pipeline.healthy:
+        return {"status": "ok"}
+    response.status_code = 503
+    return {"status": "degraded"}
 
 
 @router.get("/api/health")
@@ -37,7 +44,8 @@ def health(services: ServicesDep) -> dict[str, Any]:
     detector = services.detector.config
     publisher = services.publisher
     return {
-        "status": "ok",
+        "status": "ok" if services.pipeline.healthy else "degraded",
+        "ingest_error": services.pipeline.ingest_error,
         "app": settings.app_name,
         "log_path": str(settings.log_path),
         "tailer_offset": services.tailer.offset,

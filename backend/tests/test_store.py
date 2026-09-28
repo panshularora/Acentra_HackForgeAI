@@ -176,3 +176,16 @@ def test_database_from_before_explanations_is_migrated(tmp_path: Path) -> None:
     assert old_alert is not None
     assert old_alert.explanation == Explanation()
     assert migrated.save_detection(explained_alert()).explanation.detector == "error_spike"
+
+
+def test_resolve_stale_open_closes_only_open_incidents(store: AlertStore) -> None:
+    store.save_detection(make_alert("open-1"))
+    store.save_detection(make_alert("open-2"))
+    store.save_detection(make_alert("done", status="resolved", resolved_at=T0))
+    now = T0 + timedelta(hours=1)
+
+    assert store.resolve_stale_open(now) == 2
+
+    assert all(a.status == "resolved" for a in store.list_recent())
+    assert store.get("open-1").resolved_at == now  # type: ignore[union-attr]
+    assert store.get("done").resolved_at == T0  # type: ignore[union-attr]

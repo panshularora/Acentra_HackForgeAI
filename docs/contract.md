@@ -100,6 +100,9 @@ The global error rate stays in StatsPoint for the chart and as the benchmark con
 summary stays a single human sentence and still names the IP for credential stuffing.
 
 ### Health additions (/api/health)
+"status": "ok" | "degraded"   // degraded when the pipeline stopped or the log cannot be read
+"ingest_error": str|null      // why the last read of the log failed; null while reading works
+GET /health returns 200 {"status":"ok"} or 503 {"status":"degraded"} on the same condition.
 "detector": {"window_seconds": int, "bucket_seconds": int, "baseline_min_buckets": int,
              "detectors": ["error_spike","silence","new_pattern","flow_break"]}
 "learning": same object as in StatsPoint.

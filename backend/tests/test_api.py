@@ -13,7 +13,7 @@ from app.config import Settings
 from app.main import create_app
 from app.services import Services
 from tests.aws import cloudwatch_messages, receive_envelopes, subscribe_queue
-from tests.factories import T0
+from tests.factories import T0, make_alert
 
 # Buckets are an hour long so the background clock never fires during a test;
 # tests close buckets explicitly instead.
@@ -118,7 +118,42 @@ def test_health_reports_pipeline_state(client: TestClient, log_path: Path) -> No
 
 
 def test_liveness_probe(client: TestClient) -> None:
-    assert client.get("/health").json() == {"status": "ok"}
+    response = client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
+def test_health_fails_while_the_log_cannot_be_read(tmp_path: Path) -> None:
+    log_dir = tmp_path / "app.log"
+    log_dir.mkdir()
+    settings = Settings(log_path=log_dir, db_path=tmp_path / "test.db", **TEST_SETTINGS)
+    with TestClient(create_app(settings)) as client:
+        deadline = time.monotonic() + 5
+        while client.get("/health").status_code == 200:
+            assert time.monotonic() < deadline, "health never reported the dead ingest"
+            time.sleep(0.01)
+
+        assert client.get("/health").json() == {"status": "degraded"}
+        body = client.get("/api/health").json()
+        assert body["status"] == "degraded"
+        assert body["ingest_error"].startswith("IsADirectoryError")
+
+
+def test_incident_left_open_by_a_previous_run_is_resolved_on_startup(
+    tmp_path: Path, log_path: Path
+) -> None:
+    settings = Settings(log_path=log_path, db_path=tmp_path / "test.db", **TEST_SETTINGS)
+    with TestClient(create_app(settings)) as first_run:
+        services_of(first_run).store.save_detection(make_alert("stale"))
+        assert first_run.get("/api/alerts").json()["alerts"][0]["status"] == "open"
+
+    with TestClient(create_app(settings)) as second_run:
+        [alert] = second_run.get("/api/alerts").json()["alerts"]
+
+    assert alert["id"] == "stale"
+    assert alert["status"] == "resolved"
+    assert alert["resolved_at"] is not None
 
 
 def test_stats_endpoint_returns_closed_buckets(client: TestClient, log_path: Path) -> None:

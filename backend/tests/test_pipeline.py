@@ -206,3 +206,87 @@ async def test_bucket_clock_skips_missed_boundaries_after_a_stall(tmp_path: Path
     closed = await run_clock(pipeline, closes=2)
 
     assert [c.timestamp() for c in closed] == [1_000_010.0, 1_000_020.0]
+
+
+class StopLoopError(Exception):
+    pass
+
+
+async def test_ingest_survives_an_unreadable_log_and_recovers(tmp_path: Path) -> None:
+    log = tmp_path / "app.log"
+    log.mkdir()  # opening a directory raises IsADirectoryError, like a bad rotation
+    delays: list[float] = []
+    health: list[bool] = []
+
+    async def fake_sleep(seconds: float) -> None:
+        delays.append(seconds)
+        health.append(pipeline.healthy)
+        if len(delays) == 2:
+            log.rmdir()
+            log.write_text("")
+        elif len(delays) == 3:
+            log.write_text('2026-09-28T13:00:00Z INFO eligibility-check msg="ok"\n')
+        elif len(delays) == 4:
+            raise StopLoopError
+
+    pipeline = Pipeline(
+        tailer=FileTailer(log, poll_interval=0.25),
+        parser=LogParser(),
+        detector=Detector(DetectorConfig()),
+        store=AlertStore(":memory:"),
+        stats=StatsHistory(100),
+        clients=ConnectionManager(),
+        sleep=fake_sleep,
+    )
+
+    with pytest.raises(StopLoopError):
+        await pipeline._ingest_loop()
+
+    assert delays == [1.0, 2.0, 0.25, 0.25]
+    assert health == [False, False, True, True]
+    assert pipeline.ingest_error is None
+    assert pipeline.parser.parsed == 1
+
+
+async def test_a_line_that_breaks_processing_is_dropped_not_fatal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    log = tmp_path / "app.log"
+    log.write_text("")
+    pipeline = build(tmp_path, None)
+    pipeline.tailer = FileTailer(log, from_start=True)
+    real_parse = pipeline.parser.parse
+
+    def parse(line: str) -> Any:
+        if "boom" in line:
+            raise ValueError("parser bug")
+        return real_parse(line)
+
+    monkeypatch.setattr(pipeline.parser, "parse", parse)
+    log.write_text(
+        '2026-09-28T13:00:00Z INFO eligibility-check msg="boom"\n'
+        '2026-09-28T13:00:00Z INFO eligibility-check msg="ok"\n'
+    )
+
+    async def stop_after_first_poll(seconds: float) -> None:
+        raise StopLoopError
+
+    pipeline._sleep = stop_after_first_poll
+    with pytest.raises(StopLoopError):
+        await pipeline._ingest_loop()
+
+    assert pipeline.parser.parsed == 1
+    assert pipeline.healthy
+
+
+async def test_pipeline_reports_unhealthy_once_it_stops(tmp_path: Path) -> None:
+    pipeline = build(tmp_path, None)
+    task = asyncio.create_task(pipeline.run())
+    await asyncio.sleep(0)
+    assert pipeline.healthy
+
+    task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await task
+
+    assert not pipeline.healthy

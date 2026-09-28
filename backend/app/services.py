@@ -1,6 +1,8 @@
 """Construct and hold the long-lived components the API and pipeline share."""
 
+import logging
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from app.alerts.publisher import AlertPublisher
 from app.alerts.store import AlertStore, StatsHistory
@@ -10,6 +12,8 @@ from app.detection.detector import Detector, DetectorConfig
 from app.ingest.parser import LogParser
 from app.ingest.tailer import FileTailer
 from app.pipeline import Pipeline
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -36,6 +40,8 @@ def build_services(settings: Settings) -> Services:
     """Wire the components together from settings."""
     detector = Detector(DetectorConfig.from_settings(settings))
     store = AlertStore(settings.db_path)
+    if closed := store.resolve_stale_open(datetime.now(UTC)):
+        logger.warning("resolved %d incident(s) left open by the previous run", closed)
     stats = StatsHistory(settings.stats_history_minutes * 60 // settings.bucket_seconds)
     clients = ConnectionManager()
     tailer = FileTailer(
