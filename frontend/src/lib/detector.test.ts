@@ -3,6 +3,7 @@ import {
   baselineState,
   DEFAULT_DETECTOR_TIMING,
   describeBaseline,
+  detectorLabel,
   detectorTiming,
   windowBuckets,
 } from './detector';
@@ -73,5 +74,25 @@ describe('detectorTiming', () => {
     expect(describeBaseline({ kind: 'filling', collected: 2, required: 6 }, 120)).toBe(
       'Filling first 120s window, 2 of 6 buckets',
     );
+  });
+});
+
+describe('detectorLabel', () => {
+  it('names each contract v2 detector', () => {
+    expect(detectorLabel('error_spike')).toBe('Error spike');
+    expect(detectorLabel('silence')).toBe('Silence');
+    expect(detectorLabel('new_pattern')).toBe('New pattern');
+    expect(detectorLabel('flow_break')).toBe('Flow break');
+  });
+
+  it('returns null when the backend sent no detector', () => {
+    expect(detectorLabel(undefined)).toBeNull();
+    expect(detectorLabel(null)).toBeNull();
+    expect(detectorLabel('')).toBeNull();
+  });
+
+  it('humanises a detector this build does not know yet', () => {
+    expect(detectorLabel('rate_drop')).toBe('Rate drop');
+    expect(detectorLabel('toString')).toBe('ToString');
   });
 });

@@ -1,7 +1,9 @@
 import { useId, useState } from 'react';
+import { detectorLabel } from '../lib/detector';
 import {
   formatClock,
   formatDuration,
+  formatMeasure,
   formatMultiple,
   formatPercent,
   formatScore,
@@ -9,8 +11,10 @@ import {
 import type { Alert, Contributor, DeliveryStatus } from '../types';
 import { MaskedText } from './MaskedText';
 import { SeverityBadge } from './SeverityBadge';
+import { TemplateText } from './TemplateText';
 
 const MAX_CONTRIBUTORS = 3;
+const MAX_PARAMS = 3;
 const DELIVERY_LABEL: Record<DeliveryStatus, string> = {
   pending: 'pending',
   sent: 'sent',
@@ -55,6 +59,70 @@ function ContributorGroup({
   );
 }
 
+/**
+ * Why the detector fired, from the contract v2 fields: the template, its
+ * normal band against the observed value, and the top extracted parameters.
+ * Each row appears only when the backend sent it, and the whole block is
+ * omitted for older backends.
+ */
+function AlertExplanation({ alert }: { alert: Alert }) {
+  const { template, baseline_band: band, observed } = alert;
+  const params = (alert.params ?? []).slice(0, MAX_PARAMS);
+  if (!template && !band && params.length === 0) return null;
+
+  return (
+    <dl className="alert-card__explain">
+      {template && (
+        <div>
+          <dt>Template</dt>
+          <dd>
+            <span className="alert-card__template mono">
+              <TemplateText text={template.text} />
+            </span>
+          </dd>
+        </div>
+      )}
+      {band && (
+        <div>
+          <dt>Baseline</dt>
+          <dd className="alert-card__band">
+            normal &le; <span className="mono">{formatMeasure(band.upper)}</span> {band.unit}
+            {observed != null && (
+              <>
+                , observed{' '}
+                <span className="mono alert-card__observed">{formatMeasure(observed)}</span>
+              </>
+            )}
+          </dd>
+        </div>
+      )}
+      {params.length > 0 && (
+        <div>
+          <dt>Parameters</dt>
+          <dd>
+            <ul className="param-list">
+              {params.map((param) => (
+                <li key={`${param.name}=${param.value}`} className="param">
+                  <span className="param__name">{param.name}</span>{' '}
+                  <span className="param__value mono">
+                    <MaskedText text={param.value} />
+                  </span>{' '}
+                  <span className="param__share mono">{formatPercent(param.share, 0)}</span>
+                </li>
+              ))}
+            </ul>
+          </dd>
+        </div>
+      )}
+    </dl>
+  );
+}
+
+function logLinesTitle(hasFirstLine: boolean, sampleCount: number): string {
+  if (!hasFirstLine) return 'Sample log lines';
+  return sampleCount > 0 ? 'First bad line and samples' : 'First bad line';
+}
+
 function DeliveryChip({
   channel,
   status,
@@ -96,6 +164,9 @@ export function AlertCard({ alert, now, isNew = false, onAcknowledge }: AlertCar
   const multiple = formatMultiple(alert.error_rate, alert.baseline_median);
   const { services, messages, source_ips: sourceIps } = alert.top_contributors;
   const { sns, cloudwatch } = alert.delivery;
+  const detector = detectorLabel(alert.detector);
+  const firstBadLine = alert.first_bad_line ?? null;
+  const sampleCount = alert.sample_lines.length;
 
   const acknowledge = async () => {
     if (!onAcknowledge) return;
@@ -121,6 +192,11 @@ export function AlertCard({ alert, now, isNew = false, onAcknowledge }: AlertCar
     <article className={classes} aria-labelledby={headingId} data-alert-id={alert.id}>
       <header className="alert-card__header">
         <SeverityBadge severity={alert.severity} />
+        {detector && (
+          <span className="detector-label" title="Detector that opened this incident">
+            {detector}
+          </span>
+        )}
         <span className="alert-card__status">
           {isOpen ? 'Open' : 'Resolved'}
           {alert.acknowledged && ' \u00b7 Acknowledged'}
@@ -133,6 +209,8 @@ export function AlertCard({ alert, now, isNew = false, onAcknowledge }: AlertCar
       <h3 id={headingId} className="alert-card__summary">
         {alert.summary}
       </h3>
+
+      <AlertExplanation alert={alert} />
 
       <dl className="alert-card__facts">
         <div>
@@ -168,19 +246,32 @@ export function AlertCard({ alert, now, isNew = false, onAcknowledge }: AlertCar
         <ContributorGroup label="Source IP" items={sourceIps} mono />
       </div>
 
-      {alert.sample_lines.length > 0 && (
+      {(firstBadLine !== null || sampleCount > 0) && (
         <details className="samples">
           <summary>
-            Sample log lines{' '}
-            <span className="muted">({alert.sample_lines.length}, PII masked)</span>
+            {logLinesTitle(firstBadLine !== null, sampleCount)}{' '}
+            <span className="muted">({sampleCount > 0 && `${sampleCount}, `}PII masked)</span>
           </summary>
-          <pre className="samples__lines">
-            {alert.sample_lines.map((line, i) => (
-              <code key={i}>
-                <MaskedText text={line} />
-              </code>
-            ))}
-          </pre>
+          {firstBadLine !== null && (
+            <>
+              <h4 className="samples__label">First bad line</h4>
+              <pre className="samples__lines samples__lines--first">
+                <code>
+                  <MaskedText text={firstBadLine} />
+                </code>
+              </pre>
+              {sampleCount > 0 && <h4 className="samples__label">Samples</h4>}
+            </>
+          )}
+          {sampleCount > 0 && (
+            <pre className="samples__lines">
+              {alert.sample_lines.map((line, i) => (
+                <code key={i}>
+                  <MaskedText text={line} />
+                </code>
+              ))}
+            </pre>
+          )}
         </details>
       )}
 
