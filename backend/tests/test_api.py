@@ -86,7 +86,17 @@ def test_health_reports_pipeline_state(client: TestClient, log_path: Path) -> No
     assert body["log_path"] == str(log_path)
     assert body["tailer_offset"] == log_path.stat().st_size
     assert body["aws"] == {"sns_topic_arn": None, "cloudwatch_log_group": None, "endpoint": None}
-    assert body["pipeline"]["parsed_lines"] == 5
+    assert body["detector"] == {
+        "window_seconds": 3 * 3600,
+        "bucket_seconds": 3600,
+        "baseline_min_buckets": 3,
+    }
+    assert body["pipeline"] == {
+        "parsed_lines": 5,
+        "malformed_lines": 0,
+        "baseline_warm": False,
+        "websocket_clients": 0,
+    }
 
 
 def test_liveness_probe(client: TestClient) -> None:
