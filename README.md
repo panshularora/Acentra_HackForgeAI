@@ -46,7 +46,7 @@ flowchart LR
 
 The backend is one FastAPI process. The detector is pure Python with no I/O, so the live pipeline and the replay benchmark run exactly the same code. See [docs/architecture.md](docs/architecture.md) for the data flow and the full REST/WebSocket contract, and [docs/decisions.md](docs/decisions.md) for why it is built this way.
 
-**Documentation:** [docs/ROADMAP.md](docs/ROADMAP.md) lists what is left to implement and further improvements.
+**Documentation:** [docs/PROJECT_GUIDE.md](docs/PROJECT_GUIDE.md) explains the architecture, the detection maths and every file; [docs/ROADMAP.md](docs/ROADMAP.md) lists what is left to implement and further improvements.
 
 ## How detection works
 
@@ -151,8 +151,8 @@ The backend suite has one test file per module, including moto-backed AWS delive
 
 | Suite | Result |
 | --- | --- |
-| Backend (`make check`) | 217 tests passing; ruff and mypy `--strict` clean |
-| Frontend (`npm test`, Node 22) | 87 tests passing; ESLint, `tsc`, Prettier and production build clean |
+| Backend (`make check`) | 221 tests passing; ruff and mypy `--strict` clean |
+| Frontend (`npm test`, Node 22) | 121 tests passing; ESLint, `tsc`, Prettier and production build clean |
 | Replay (`make replay`, 48,363 lines) | DB outage detected in 10 s (1 bucket), credential stuffing in 10 s (1 bucket), 0 false alarms |
 
 ## Project structure
