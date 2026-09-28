@@ -290,3 +290,41 @@ async def test_pipeline_reports_unhealthy_once_it_stops(tmp_path: Path) -> None:
         await task
 
     assert not pipeline.healthy
+
+
+async def test_recovering_from_a_read_error_does_not_reread_old_lines(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    log = tmp_path / "app.log"
+    line = '2026-09-28T13:00:00Z INFO eligibility-check msg="ok"\n'
+    log.write_text(line * 1000)
+    tailer = FileTailer(log)
+    assert tailer.read_lines() == []  # tail -f: starts at the end
+    real_read = tailer.read_lines
+    calls = 0
+
+    def flaky_read() -> list[str]:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise OSError(5, "Input/output error")
+        return real_read()
+
+    monkeypatch.setattr(tailer, "read_lines", flaky_read)
+
+    async def fake_sleep(seconds: float) -> None:
+        if calls == 1:
+            with log.open("a") as handle:
+                handle.write(line)
+        elif calls == 2:
+            raise StopLoopError
+
+    pipeline = build(tmp_path, None)
+    pipeline.tailer = tailer
+    pipeline._sleep = fake_sleep
+
+    with pytest.raises(StopLoopError):
+        await pipeline._ingest_loop()
+
+    assert pipeline.parser.parsed == 1
+    assert pipeline.ingest_error is None

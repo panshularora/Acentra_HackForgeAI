@@ -128,8 +128,9 @@ class Pipeline:
             except Exception as error:
                 if self.ingest_error is None:
                     logger.exception("cannot read %s; retrying", self.tailer.path)
+                # Keep the tailer's handle and offset: closing it here would make the
+                # next successful read start again from byte 0 of the same file.
                 self.ingest_error = f"{type(error).__name__}: {error}"
-                self.tailer.close()
                 await self._sleep(retry_delay)
                 retry_delay = min(retry_delay * 2, INGEST_RETRY_MAX_SECONDS)
                 continue
