@@ -43,6 +43,20 @@ def test_detection_update_preserves_ack_and_delivery(store: AlertStore) -> None:
     assert after.delivery.sns.message_id == "msg-1"
 
 
+def test_detection_update_can_reset_delivery_for_a_new_transition(store: AlertStore) -> None:
+    store.save_detection(make_alert())
+    store.acknowledge("a1")
+    store.set_delivery("a1", Delivery(sns=ChannelDelivery("sent", "msg-1")))
+
+    after = store.save_detection(
+        make_alert(status="resolved", resolved_at=T0, delivery=Delivery()), reset_delivery=True
+    )
+
+    assert after.acknowledged
+    assert after.delivery.sns == ChannelDelivery("pending")
+    assert after.delivery.cloudwatch == ChannelDelivery("pending")
+
+
 def test_list_recent_is_newest_first_and_limited(store: AlertStore) -> None:
     for minute in range(5):
         store.save_detection(make_alert(f"a{minute}", opened_at=T0 + timedelta(minutes=minute)))
