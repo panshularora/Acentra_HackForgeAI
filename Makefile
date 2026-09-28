@@ -6,7 +6,7 @@ BIN     := $(VENV)/bin
 RATE    ?= 40
 
 .DEFAULT_GOAL := help
-.PHONY: help install dev test lint format typecheck check moto loggen incident-db incident-auth replay clean
+.PHONY: help install dev test lint format typecheck check loggen incident-db incident-auth replay moto feed sns-tail demo clean
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-14s %s\n", $$1, $$2}'
@@ -41,6 +41,18 @@ incident-db: ## Inject a 45 s claim-adjudication database outage
 
 incident-auth: ## Inject a 30 s credential-stuffing burst against member-auth
 	$(BIN)/python tools/loggen.py --incident cred-stuffing --duration 30
+
+replay: ## Replay a known scenario and print detection latency and false alarms
+	PYTHONPATH=backend $(BIN)/python tools/replay.py
+
+moto: ## Run the local AWS emulator (SNS, CloudWatch Logs, SQS) on :5000
+	$(BIN)/moto_server -p 5000
+
+feed: ## Print the live WebSocket feed in the terminal
+	$(BIN)/python tools/watch_feed.py
+
+sns-tail: ## Print alerts as delivered through SNS (via an SQS subscription)
+	$(BIN)/python tools/sns_tail.py
 
 clean: ## Remove caches and local state
 	rm -rf backend/.pytest_cache backend/.mypy_cache backend/.ruff_cache claimswatch.db logs
