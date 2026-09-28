@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { makeAlert, makeStatsPoint, makeStatsSeries } from '../test/fixtures';
+import { makeAlert, makeHealth, makeStatsPoint, makeStatsSeries } from '../test/fixtures';
 import type { Alert, Health, StatsPoint } from '../types';
 import { backoffDelay, useAlertStream } from './useAlertStream';
 
@@ -49,13 +49,7 @@ class MockWebSocket {
   }
 }
 
-const health: Health = {
-  status: 'ok',
-  app: 'ClaimsWatch',
-  log_path: 'logs/app.log',
-  tailer_offset: 0,
-  aws: { sns_topic_arn: null, cloudwatch_log_group: null, endpoint: null },
-};
+const health: Health = makeHealth();
 
 let backend: { stats: StatsPoint[]; alerts: Alert[] };
 let fetchMock: ReturnType<typeof vi.fn>;

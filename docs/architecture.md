@@ -49,12 +49,38 @@ code on a simulated clock.
 
 | Method | Path | Returns |
 | --- | --- | --- |
-| GET | `/api/health` | status, app name, log path, tailer offset, AWS topic / log group / endpoint, pipeline counters |
+| GET | `/api/health` | status, app name, log path, tailer offset, AWS targets, detector timing, pipeline counters (below) |
+| GET | `/health` | `{"status": "ok"}`, a dependency-free liveness probe for containers |
 | GET | `/api/stats?minutes=10` | `{"points": [StatsPoint, ...]}`, oldest first |
 | GET | `/api/alerts?limit=50` | `{"alerts": [Alert, ...]}`, newest first by `opened_at` |
 | POST | `/api/alerts/{id}/ack` | the updated `Alert` (`acknowledged: true`), 404 if unknown |
 
 Interactive docs are served at `http://localhost:8000/docs`.
+
+### Health
+
+```json
+{
+  "status": "ok",
+  "app": "ClaimsWatch",
+  "log_path": "logs/app.log",
+  "tailer_offset": 1889389,
+  "aws": {
+    "sns_topic_arn": "arn:aws:sns:us-east-1:123456789012:claimswatch-alerts",
+    "cloudwatch_log_group": "/claimswatch/alerts",
+    "endpoint": "http://localhost:5000"
+  },
+  "detector": {"window_seconds": 60, "bucket_seconds": 10, "baseline_min_buckets": 6},
+  "pipeline": {"parsed_lines": 5013, "malformed_lines": 0, "baseline_warm": true, "websocket_clients": 1}
+}
+```
+
+- `aws`: all `null` when delivery is disabled; `endpoint` is `null` for real AWS.
+- `detector`: the timing the dashboard uses to label the chart and the
+  baseline warm-up (one full window, then `baseline_min_buckets` samples).
+- `pipeline`: counters for troubleshooting: lines parsed and skipped as
+  malformed since startup, whether the baseline is warm, and how many
+  WebSocket clients are connected.
 
 ## WebSocket `/ws`
 

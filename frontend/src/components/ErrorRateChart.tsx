@@ -12,22 +12,27 @@ import {
 } from 'recharts';
 import type { ConnectionState } from '../hooks/alertStreamReducer';
 import { percentAxis } from '../lib/axis';
-import { BUCKET_SECONDS, describeBaseline, type BaselineState } from '../lib/detector';
+import { DEFAULT_DETECTOR_TIMING, describeBaseline, type BaselineState } from '../lib/detector';
 import { formatClock, formatCount, formatPercent, formatScore } from '../lib/format';
 import { SEVERITIES } from '../lib/severity';
 import { COLOR, FONT, SEVERITY_COLOR } from '../theme';
-import type { Severity, StatsPoint } from '../types';
+import type { DetectorTiming, Severity, StatsPoint } from '../types';
 import { SeverityBadge } from './SeverityBadge';
 
 const VISIBLE_WINDOW_MS = 10 * 60 * 1000;
 const TICK_INTERVAL_MS = 60 * 1000;
 const TICK_EDGE_GAP_MS = 20 * 1000;
 
-const EMPTY_MESSAGE: Record<ConnectionState, string> = {
-  connecting: 'Connecting to the live stream.',
-  live: `Waiting for the first ${BUCKET_SECONDS}-second bucket from the log tailer.`,
-  reconnecting: 'The backend is unreachable. Retrying automatically.',
-};
+function emptyMessage(connection: ConnectionState, bucketSeconds: number): string {
+  switch (connection) {
+    case 'connecting':
+      return 'Connecting to the live stream.';
+    case 'live':
+      return `Waiting for the first ${bucketSeconds}-second bucket from the log tailer.`;
+    case 'reconnecting':
+      return 'The backend is unreachable. Retrying automatically.';
+  }
+}
 
 interface ChartDatum {
   t: number;
@@ -57,9 +62,8 @@ function toDatum(point: StatsPoint): ChartDatum {
 }
 
 /** Groups consecutive anomalous buckets into spans tinted by their peak severity. */
-function anomalySpans(data: ChartDatum[]): AnomalySpan[] {
+function anomalySpans(data: ChartDatum[], bucketMs: number): AnomalySpan[] {
   const spans: AnomalySpan[] = [];
-  const bucketMs = BUCKET_SECONDS * 1000;
   let current: AnomalySpan | null = null;
   for (const d of data) {
     const severity = d.point.severity;
@@ -140,11 +144,19 @@ interface ErrorRateChartProps {
   stats: StatsPoint[];
   baseline: BaselineState;
   connection: ConnectionState;
+  /** Detector timing from /api/health; defaults until it has loaded. */
+  timing?: DetectorTiming;
 }
 
-export function ErrorRateChart({ stats, baseline, connection }: ErrorRateChartProps) {
+export function ErrorRateChart({
+  stats,
+  baseline,
+  connection,
+  timing = DEFAULT_DETECTOR_TIMING,
+}: ErrorRateChartProps) {
+  const bucketSeconds = timing.bucket_seconds;
   const data = useMemo(() => stats.map(toDatum), [stats]);
-  const spans = useMemo(() => anomalySpans(data), [data]);
+  const spans = useMemo(() => anomalySpans(data, bucketSeconds * 1000), [data, bucketSeconds]);
 
   const end = data[data.length - 1]?.t ?? 0;
   const start = end - VISIBLE_WINDOW_MS;
@@ -159,9 +171,9 @@ export function ErrorRateChart({ stats, baseline, connection }: ErrorRateChartPr
       <header className="panel__header">
         <div>
           <h2 id="chart-title" className="panel__title">
-            Error rate (60s window)
+            Error rate ({timing.window_seconds}s window)
           </h2>
-          <p className="panel__subtitle">Updated every {BUCKET_SECONDS}s, last 10 minutes</p>
+          <p className="panel__subtitle">Updated every {bucketSeconds}s, last 10 minutes</p>
         </div>
         <ul className="chart-legend" aria-label="Chart legend">
           <li>
@@ -188,12 +200,13 @@ export function ErrorRateChart({ stats, baseline, connection }: ErrorRateChartPr
 
       <div className="chart-panel__body">
         {data.length === 0 ? (
-          <p className="empty-state">{EMPTY_MESSAGE[connection]}</p>
+          <p className="empty-state">{emptyMessage(connection, bucketSeconds)}</p>
         ) : (
           <>
             {(baseline.kind === 'filling' || baseline.kind === 'learning') && (
               <p className="chart-panel__notice" role="status">
-                {describeBaseline(baseline)}. The normal range and alerting start once it is ready.
+                {describeBaseline(baseline, timing.window_seconds)}. The normal range and alerting
+                start once it is ready.
               </p>
             )}
             <ResponsiveContainer width="100%" height="100%">

@@ -1,14 +1,24 @@
-import type { StatsPoint } from '../types';
+import type { DetectorTiming, Health, StatsPoint } from '../types';
 
 /**
- * Detector parameters the dashboard needs for labelling. They mirror the
- * backend defaults in backend/app/config.py (window_seconds, bucket_seconds,
- * baseline_min_buckets); /api/health does not expose them today.
+ * Fallback used until /api/health answers. Matches the backend defaults in
+ * backend/app/config.py; the live values always come from the health payload.
  */
-export const WINDOW_SECONDS = 60;
-export const BUCKET_SECONDS = 10;
-export const WINDOW_BUCKETS = WINDOW_SECONDS / BUCKET_SECONDS;
-export const BASELINE_MIN_BUCKETS = 6;
+export const DEFAULT_DETECTOR_TIMING: DetectorTiming = {
+  window_seconds: 60,
+  bucket_seconds: 10,
+  baseline_min_buckets: 6,
+};
+
+/** The backend's detector timing, or the defaults while health is unknown. */
+export function detectorTiming(health: Health | null): DetectorTiming {
+  return health?.detector ?? DEFAULT_DETECTOR_TIMING;
+}
+
+/** Number of buckets in one sliding window. */
+export function windowBuckets(timing: DetectorTiming): number {
+  return Math.max(1, Math.floor(timing.window_seconds / timing.bucket_seconds));
+}
 
 export type BaselineState =
   | { kind: 'waiting' }
@@ -20,15 +30,15 @@ export type BaselineState =
  * Whether the baseline is trusted yet, judged from the newest bucket.
  *
  * The backend only feeds the baseline once the sliding window is full, so a
- * cold start has two phases: filling the first window (WINDOW_BUCKETS
- * buckets), then collecting BASELINE_MIN_BUCKETS window rates. Progress is
+ * cold start has two phases: filling the first window (`windowBucketCount`
+ * buckets), then collecting `required` window rates. Progress is
  * read from the trailing run of buckets without a baseline, so a backend
  * restart starts the count again.
  */
 export function baselineState(
   stats: readonly StatsPoint[],
-  required: number = BASELINE_MIN_BUCKETS,
-  windowBuckets: number = WINDOW_BUCKETS,
+  required: number = DEFAULT_DETECTOR_TIMING.baseline_min_buckets,
+  windowBucketCount: number = windowBuckets(DEFAULT_DETECTOR_TIMING),
 ): BaselineState {
   const newest = stats[stats.length - 1];
   if (!newest) return { kind: 'waiting' };
@@ -36,18 +46,23 @@ export function baselineState(
 
   let cold = 0;
   for (let i = stats.length - 1; i >= 0 && stats[i]?.baseline_median === null; i--) cold++;
-  if (cold < windowBuckets) return { kind: 'filling', collected: cold, required: windowBuckets };
+  if (cold < windowBucketCount) {
+    return { kind: 'filling', collected: cold, required: windowBucketCount };
+  }
   // The bucket that completes the window is also the first baseline sample.
-  const collected = Math.min(cold - windowBuckets + 1, required);
+  const collected = Math.min(cold - windowBucketCount + 1, required);
   return { kind: 'learning', collected, required };
 }
 
-export function describeBaseline(state: BaselineState): string {
+export function describeBaseline(
+  state: BaselineState,
+  windowSeconds: number = DEFAULT_DETECTOR_TIMING.window_seconds,
+): string {
   switch (state.kind) {
     case 'waiting':
       return 'Waiting for first bucket';
     case 'filling':
-      return `Filling first 60s window, ${state.collected} of ${state.required} buckets`;
+      return `Filling first ${windowSeconds}s window, ${state.collected} of ${state.required} buckets`;
     case 'learning':
       return `Learning baseline, ${state.collected} of ${state.required} buckets`;
     case 'ready':

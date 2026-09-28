@@ -78,6 +78,21 @@ export interface Alert {
   };
 }
 
+/** Detector timing reported by /api/health, used for chart labels and warm-up progress. */
+export interface DetectorTiming {
+  window_seconds: number;
+  bucket_seconds: number;
+  baseline_min_buckets: number;
+}
+
+/** Troubleshooting counters reported by /api/health. */
+export interface PipelineCounters {
+  parsed_lines: number;
+  malformed_lines: number;
+  baseline_warm: boolean;
+  websocket_clients: number;
+}
+
 export interface Health {
   status: 'ok';
   app: string;
@@ -88,6 +103,8 @@ export interface Health {
     cloudwatch_log_group: string | null;
     endpoint: string | null;
   };
+  detector: DetectorTiming;
+  pipeline: PipelineCounters;
 }
 
 /** Server -> client WebSocket messages, discriminated on `type`. */

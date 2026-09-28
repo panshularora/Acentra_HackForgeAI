@@ -1,5 +1,11 @@
-import { makeStatsSeries } from '../test/fixtures';
-import { baselineState, describeBaseline } from './detector';
+import { makeHealth, makeStatsSeries } from '../test/fixtures';
+import {
+  baselineState,
+  DEFAULT_DETECTOR_TIMING,
+  describeBaseline,
+  detectorTiming,
+  windowBuckets,
+} from './detector';
 
 describe('baselineState', () => {
   it('waits when there is no data yet', () => {
@@ -43,5 +49,29 @@ describe('baselineState', () => {
       collected: 2,
       required: 6,
     });
+  });
+});
+
+describe('detectorTiming', () => {
+  it('uses the timing reported by /api/health', () => {
+    const detector = { window_seconds: 120, bucket_seconds: 20, baseline_min_buckets: 4 };
+    expect(detectorTiming(makeHealth({ detector }))).toEqual(detector);
+  });
+
+  it('falls back to the backend defaults before health has loaded', () => {
+    expect(detectorTiming(null)).toEqual(DEFAULT_DETECTOR_TIMING);
+  });
+
+  it('derives the number of buckets per window', () => {
+    expect(windowBuckets(DEFAULT_DETECTOR_TIMING)).toBe(6);
+    expect(
+      windowBuckets({ window_seconds: 120, bucket_seconds: 20, baseline_min_buckets: 4 }),
+    ).toBe(6);
+  });
+
+  it('labels the filling phase with the configured window length', () => {
+    expect(describeBaseline({ kind: 'filling', collected: 2, required: 6 }, 120)).toBe(
+      'Filling first 120s window, 2 of 6 buckets',
+    );
   });
 });

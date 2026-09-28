@@ -1,4 +1,4 @@
-import type { Alert, StatsPoint } from '../types';
+import type { Alert, Health, StatsPoint } from '../types';
 
 /** Builders for realistic contract objects; override only what a test cares about. */
 
@@ -67,4 +67,17 @@ export function nth<T>(items: readonly T[], index: number): T {
   const item = items.at(index);
   if (item === undefined) throw new Error(`no item at index ${index}`);
   return item;
+}
+
+export function makeHealth(overrides: Partial<Health> = {}): Health {
+  return {
+    status: 'ok',
+    app: 'ClaimsWatch',
+    log_path: 'logs/app.log',
+    tailer_offset: 0,
+    aws: { sns_topic_arn: null, cloudwatch_log_group: null, endpoint: null },
+    detector: { window_seconds: 60, bucket_seconds: 10, baseline_min_buckets: 6 },
+    pipeline: { parsed_lines: 0, malformed_lines: 0, baseline_warm: false, websocket_clients: 0 },
+    ...overrides,
+  };
 }

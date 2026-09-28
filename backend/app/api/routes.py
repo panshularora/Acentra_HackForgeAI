@@ -27,8 +27,13 @@ def liveness() -> dict[str, str]:
 
 @router.get("/api/health")
 def health(services: ServicesDep) -> dict[str, Any]:
-    """Liveness plus enough detail to tell whether ingestion and AWS are wired up."""
+    """Liveness plus enough detail to tell whether ingestion and AWS are wired up.
+
+    ``detector`` carries the timing the dashboard needs to label its chart and
+    warm-up progress, so the frontend never keeps its own copy of these values.
+    """
     settings = services.settings
+    detector = services.detector.config
     publisher = services.publisher
     return {
         "status": "ok",
@@ -39,6 +44,11 @@ def health(services: ServicesDep) -> dict[str, Any]:
             "sns_topic_arn": publisher.topic_arn if publisher else None,
             "cloudwatch_log_group": publisher.log_group if publisher else None,
             "endpoint": settings.aws_endpoint_url if publisher else None,
+        },
+        "detector": {
+            "window_seconds": detector.window_seconds,
+            "bucket_seconds": detector.bucket_seconds,
+            "baseline_min_buckets": detector.baseline_min_buckets,
         },
         "pipeline": {
             "parsed_lines": services.parser.parsed,

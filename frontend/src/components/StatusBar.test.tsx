@@ -1,18 +1,14 @@
 import { render, screen } from '@testing-library/react';
-import type { Health } from '../types';
+import { makeHealth } from '../test/fixtures';
 import { StatusBar } from './StatusBar';
 
-const health: Health = {
-  status: 'ok',
-  app: 'ClaimsWatch',
-  log_path: 'logs/app.log',
-  tailer_offset: 0,
+const health = makeHealth({
   aws: {
     sns_topic_arn: 'arn:aws:sns:us-east-1:000000000000:claimswatch-alerts',
     cloudwatch_log_group: '/claimswatch/alerts',
     endpoint: 'http://localhost:5000',
   },
-};
+});
 
 describe('StatusBar', () => {
   it.each([
