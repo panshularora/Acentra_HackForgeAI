@@ -17,14 +17,16 @@ import argparse
 import math
 import random
 import sys
+from collections import deque
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from statistics import median
 
 import loggen
 from app.detection.detector import AlertChange, Detector, DetectorConfig
 from app.ingest.parser import LogParser
-from app.models import Alert
+from app.models import Alert, LogEvent
 
 START = datetime(2026, 9, 28, 9, 0, 0, tzinfo=UTC)
 
@@ -193,6 +195,110 @@ def format_report(report: ReplayReport) -> str:
         rows.append(f"{'':16}{result.peak.summary}")
     rows += ["", f"False alarms outside incidents: {len(report.false_alarms)}"]
     return "\n".join(rows)
+
+
+# The benchmark control: global error-rate alerting as it ran before
+# template-aware detection. It is a frozen, self-contained copy of that
+# decision rule (see git history of app/detection/detector.py before the
+# Drain3 change), so the benchmark keeps comparing against the same baseline
+# while the production detector evolves.
+
+
+@dataclass(frozen=True)
+class OpenedAlert:
+    """An alert at the moment it opened: when, which detector and its one-line summary."""
+
+    opened_at: datetime
+    detector: str
+    summary: str
+
+
+@dataclass(frozen=True)
+class GlobalRateConfig:
+    """Settings of the control detector; the defaults are the pre-Drain3 production values."""
+
+    window_buckets: int = 6
+    bucket_seconds: int = 10
+    baseline_buckets: int = 30
+    baseline_min_buckets: int = 6
+    mad_floor: float = 0.002
+    min_errors: int = 5
+    min_total: int = 50
+    resolve_after_buckets: int = 3
+    threshold: float = 3.5  # WARNING, the lowest severity that opens an incident
+
+
+class GlobalErrorRateDetector:
+    """One error rate for the whole log, scored against its own median and MAD.
+
+    Errors divided by lines over the last ``window_buckets`` buckets gets a
+    modified z-score against the last ``baseline_buckets`` normal window
+    rates. A bucket is anomalous when the score reaches ``threshold`` and the
+    window holds at least ``min_errors`` errors and ``min_total`` lines. The
+    first anomalous bucket opens an incident, ``resolve_after_buckets``
+    normal buckets resolve it, and the baseline only learns from buckets with
+    no incident open and no incident change.
+    """
+
+    name = "global_error_rate"
+
+    def __init__(self, config: GlobalRateConfig | None = None) -> None:
+        self.config = config or GlobalRateConfig()
+        self._window: deque[tuple[int, int]] = deque(maxlen=self.config.window_buckets)
+        self._rates: deque[float] = deque(maxlen=self.config.baseline_buckets)
+        self._total = 0
+        self._errors = 0
+        self._open = False
+        self._normal_streak = 0
+
+    def observe(self, event: LogEvent) -> None:
+        """Count an event in the currently open bucket."""
+        self._total += 1
+        self._errors += event.is_error
+
+    def close_bucket(self, end: datetime) -> list[OpenedAlert]:
+        """Close the open bucket at ``end``; return the alert it opened, if any."""
+        self._window.append((self._total, self._errors))
+        self._total = self._errors = 0
+        total = sum(t for t, _ in self._window)
+        errors = sum(e for _, e in self._window)
+        rate = errors / total if total else 0.0
+        score = self._score(rate) if total else None
+        anomalous = (
+            score is not None
+            and score >= self.config.threshold
+            and errors >= self.config.min_errors
+            and total >= self.config.min_total
+        )
+
+        opened: list[OpenedAlert] = []
+        changed = anomalous
+        if anomalous:
+            self._normal_streak = 0
+            if not self._open:
+                self._open = True
+                summary = f"error rate {rate:.1%} (modified z-score {score:.1f})"
+                opened.append(OpenedAlert(end, self.name, summary))
+        elif self._open:
+            self._normal_streak += 1
+            if self._normal_streak >= self.config.resolve_after_buckets:
+                self._open, self._normal_streak, changed = False, 0, True
+
+        learnable = len(self._window) == self.config.window_buckets and total > 0
+        if learnable and not self._open and not changed:
+            self._rates.append(rate)
+        return opened
+
+    def _score(self, rate: float) -> float | None:
+        if len(self._rates) < self.config.baseline_min_buckets:
+            return None
+        centre = median(self._rates)
+        spread = max(median(abs(r - centre) for r in self._rates), self.config.mad_floor)
+        return MAD_SCALE * (rate - centre) / spread
+
+
+# Scales MAD to the standard deviation of a normal distribution (1 / 1.4826).
+MAD_SCALE = 0.6745
 
 
 def main(argv: list[str] | None = None) -> int:
