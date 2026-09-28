@@ -301,8 +301,8 @@
       ]
     },
     "tests": {
-      "backend": "146",
-      "frontend": "80"
+      "backend": "150",
+      "frontend": "87"
     },
     "masking": {
       "raw": "2026-09-28T09:14:03.412Z ERROR member-auth msg=\"login failed: invalid credentials\" req=a6a3a450 member_id=M1810111 name=\"Aisha Brown\" plan=MEDICAID-A email=priya971@example.com ip=10.4.2.17 status=401 latency_ms=54",
