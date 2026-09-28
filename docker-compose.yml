@@ -21,6 +21,11 @@ services:
     image: motoserver/moto:5.2.3
     ports:
       - "5000:5000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:5000/moto-api/"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   backend:
     build:
@@ -38,7 +43,8 @@ services:
     ports:
       - "8000:8000"
     depends_on:
-      - moto
+      moto:
+        condition: service_healthy
 
   loggen:
     # Same image as the backend; writes normal claims traffic to the shared volume.
@@ -51,7 +57,8 @@ services:
     volumes:
       - logs:/app/logs
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
   frontend:
     # Built dashboard served by nginx, which proxies /api and /ws to "backend".
@@ -59,7 +66,8 @@ services:
     ports:
       - "5173:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
 volumes:
   logs:
