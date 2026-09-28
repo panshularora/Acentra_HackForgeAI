@@ -6,7 +6,7 @@ BIN     := $(VENV)/bin
 RATE    ?= 40
 
 .DEFAULT_GOAL := help
-.PHONY: help install dev test lint format typecheck check loggen incident-db incident-auth replay moto feed sns-tail demo clean
+.PHONY: help install dev test lint format typecheck check loggen incident-db incident-auth replay moto feed sns-tail dashboard demo clean
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-14s %s\n", $$1, $$2}'
@@ -18,6 +18,12 @@ install: ## Create the backend virtualenv and install dependencies
 
 dev: ## Run the API with auto-reload on :8000
 	$(BIN)/uvicorn app.main:app --app-dir backend --reload --port 8000
+
+dashboard: ## Run the dashboard dev server on :5173 (proxies to :8000)
+	cd frontend && npm install && npm run dev
+
+demo: ## Run the whole stack (moto, backend, loggen, dashboard) with Docker
+	docker compose up --build
 
 test: ## Run the backend test suite
 	cd backend && .venv/bin/pytest
