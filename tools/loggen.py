@@ -94,11 +94,7 @@ SERVICES = (
         0.30,
         ok=(Outcome("INFO", "eligibility verified", 200, (40, 180)),),
         warn=(Outcome("WARN", "state MMIS response slow", 200, (900, 2500)),),
-        errors=(
-            Outcome(
-                "ERROR", "eligibility lookup failed: upstream 502", 502, (100, 400)
-            ),
-        ),
+        errors=(Outcome("ERROR", "eligibility lookup failed: upstream 502", 502, (100, 400)),),
     ),
     Service(
         "claim-adjudication",
@@ -107,11 +103,7 @@ SERVICES = (
             Outcome("INFO", "claim adjudicated", 200, (80, 300)),
             Outcome("INFO", "claim pended for review", 202, (80, 300)),
         ),
-        warn=(
-            Outcome(
-                "WARN", "prior authorization missing, claim pended", 202, (80, 300)
-            ),
-        ),
+        warn=(Outcome("WARN", "prior authorization missing, claim pended", 202, (80, 300)),),
         errors=(Outcome("ERROR", "claim rules engine error", 500, (200, 900)),),
     ),
     Service(
@@ -125,11 +117,7 @@ SERVICES = (
         "provider-directory",
         0.15,
         ok=(Outcome("INFO", "provider search completed", 200, (20, 150)),),
-        warn=(
-            Outcome(
-                "WARN", "search index stale, serving cached results", 200, (20, 150)
-            ),
-        ),
+        warn=(Outcome("WARN", "search index stale, serving cached results", 200, (20, 150)),),
         errors=(Outcome("ERROR", "NPI registry request failed", 504, (3000, 5000)),),
     ),
     Service(
@@ -179,17 +167,11 @@ class LineFactory:
                 pool="claims-primary",
             )
         if kind == "cred-stuffing":
-            outcome = Outcome(
-                "ERROR", "login failed: invalid credentials", 401, (20, 60)
-            )
-            return self._line(
-                ts, "member-auth", outcome, CRED_STUFFING_IP, email=self._email()
-            )
+            outcome = Outcome("ERROR", "login failed: invalid credentials", 401, (20, 60))
+            return self._line(ts, "member-auth", outcome, CRED_STUFFING_IP, email=self._email())
         raise ValueError(f"unknown incident: {kind}")
 
-    def _line(
-        self, ts: datetime, service: str, outcome: Outcome, ip: str, **extra: str
-    ) -> str:
+    def _line(self, ts: datetime, service: str, outcome: Outcome, ip: str, **extra: str) -> str:
         name = f"{self.rng.choice(FIRST_NAMES)} {self.rng.choice(LAST_NAMES)}"
         fields = {
             "msg": f'"{outcome.message}"',
@@ -214,10 +196,7 @@ class LineFactory:
 
 def format_ts(ts: datetime) -> str:
     """ISO-8601 UTC with milliseconds, e.g. 2026-09-28T13:05:03.412Z."""
-    return (
-        ts.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S.")
-        + f"{ts.microsecond // 1000:03d}Z"
-    )
+    return ts.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S.") + f"{ts.microsecond // 1000:03d}Z"
 
 
 def drifting_error_rate(base: float, elapsed_seconds: float) -> float:
@@ -231,9 +210,7 @@ def lines_this_second(rng: random.Random, rate: float) -> int:
     return max(0, round(rng.gauss(rate, rate * RATE_JITTER)))
 
 
-def spread_over_second(
-    rng: random.Random, start: datetime, count: int
-) -> list[datetime]:
+def spread_over_second(rng: random.Random, start: datetime, count: int) -> list[datetime]:
     """``count`` sorted timestamps within the second starting at ``start``."""
     return sorted(start + timedelta(seconds=rng.random()) for _ in range(count))
 
@@ -252,9 +229,7 @@ def normal_second(
         yield factory.normal(ts, current_error_rate)
 
 
-def incident_second(
-    factory: LineFactory, kind: str, start: datetime, rate: float
-) -> Iterator[str]:
+def incident_second(factory: LineFactory, kind: str, start: datetime, rate: float) -> Iterator[str]:
     """All incident lines for the second beginning at ``start``."""
     count = lines_this_second(factory.rng, rate)
     for ts in spread_over_second(factory.rng, start, count):
@@ -264,9 +239,7 @@ def incident_second(
 SecondProducer = Callable[[datetime, float], Iterable[str]]
 
 
-def write_forever(
-    path: Path, produce_second: SecondProducer, duration: float | None
-) -> None:
+def write_forever(path: Path, produce_second: SecondProducer, duration: float | None) -> None:
     """Append one second of lines at a time, in real time, until ``duration`` elapses."""
     path.parent.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
@@ -283,19 +256,11 @@ def write_forever(
 def parse_args(argv: list[str]) -> argparse.Namespace:
     """Command-line interface."""
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument(
-        "--out", type=Path, default=DEFAULT_OUTPUT, help="log file to append to"
-    )
-    parser.add_argument(
-        "--rate", type=float, help="lines per second (default 40, or per incident)"
-    )
+    parser.add_argument("--out", type=Path, default=DEFAULT_OUTPUT, help="log file to append to")
+    parser.add_argument("--rate", type=float, help="lines per second (default 40, or per incident)")
     parser.add_argument("--error-rate", type=float, default=DEFAULT_ERROR_RATE)
-    parser.add_argument(
-        "--incident", choices=sorted(INCIDENTS), help="write incident lines only"
-    )
-    parser.add_argument(
-        "--duration", type=float, help="seconds to run (default: forever)"
-    )
+    parser.add_argument("--incident", choices=sorted(INCIDENTS), help="write incident lines only")
+    parser.add_argument("--duration", type=float, help="seconds to run (default: forever)")
     parser.add_argument("--seed", type=int, help="random seed for reproducible output")
     return parser.parse_args(argv)
 
@@ -315,9 +280,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         write_forever(
             args.out,
-            lambda start, _elapsed: incident_second(
-                factory, args.incident, start, rate
-            ),
+            lambda start, _elapsed: incident_second(factory, args.incident, start, rate),
             duration,
         )
         return 0
@@ -330,9 +293,7 @@ def main(argv: list[str] | None = None) -> int:
     with contextlib.suppress(KeyboardInterrupt):
         write_forever(
             args.out,
-            lambda start, elapsed: normal_second(
-                factory, start, elapsed, rate, args.error_rate
-            ),
+            lambda start, elapsed: normal_second(factory, start, elapsed, rate, args.error_rate),
             args.duration,
         )
     return 0
