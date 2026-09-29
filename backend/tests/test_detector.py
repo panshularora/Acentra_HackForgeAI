@@ -230,8 +230,9 @@ def test_min_error_guard_blocks_alerts_on_tiny_counts() -> None:
     result = harness.bucket(20, 4)
 
     assert result.stats.score is not None and result.stats.score > 3.5
-    assert result.stats.severity is None
-    assert not result.alert_events
+    assert not any(
+        event.alert.explanation.detector == "error_spike" for event in result.alert_events
+    )
 
 
 def test_min_total_guard_blocks_alerts_on_quiet_traffic() -> None:
@@ -239,7 +240,10 @@ def test_min_total_guard_blocks_alerts_on_quiet_traffic() -> None:
     for _ in range(12):
         harness.bucket(20, 0)
 
-    assert not harness.bucket(20, 15).alert_events
+    result = harness.bucket(20, 15)
+    assert not any(
+        event.alert.explanation.detector == "error_spike" for event in result.alert_events
+    )
 
 
 def test_second_spike_after_resolution_opens_a_new_incident() -> None:

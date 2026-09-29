@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { makeAlert, makeHealth } from '../test/fixtures';
 import { DeliveryPanel } from './DeliveryPanel';
 
@@ -37,6 +38,28 @@ describe('DeliveryPanel', () => {
     expect(screen.getByText('Last alert: failed')).toBeInTheDocument();
     expect(screen.getByText('AuthorizationError')).toBeInTheDocument();
     expect(screen.getByText('Last alert: sent')).toBeInTheDocument();
+  });
+
+  it('retries failed SNS deliveries from the panel', async () => {
+    const user = userEvent.setup();
+    const onRetry = vi.fn().mockResolvedValue(1);
+    render(
+      <DeliveryPanel
+        health={emulated}
+        alerts={[
+          makeAlert({
+            delivery: {
+              sns: { status: 'failed', message_id: null, error: 'SNS topic unavailable' },
+              cloudwatch: { status: 'disabled', error: null },
+            },
+          }),
+        ]}
+        now={NOW}
+        onRetry={onRetry}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: 'Retry 1 failed' }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
   });
 
   it('says delivery is off when no topic is configured', () => {

@@ -1,6 +1,6 @@
 # ClaimsWatch roadmap
 
-What is left to implement after the Acentra Health "Build to Care" code-a-thon (PS1), and how the project can be improved. Every status below was checked against `main` at commit `668521b` (221 backend tests, `make check` green) and against the open pull requests on 28 September 2026. Where the engineers' notes and the code disagreed, the code was taken as correct.
+What is left to implement after the Acentra Health "Build to Care" code-a-thon (PS1), and how the project can be improved. The glance table was updated on 29 September 2026: silence, new-pattern, and flow-break detectors now live on `main` (`DETECTORS` in `detection/detector.py`). Historical design notes below the table are kept as the original plan.
 
 The planned design for the remaining detectors is the version 2 contract in [contract.md](contract.md#version-2-template-aware-detection-additive-to-version-1).
 
@@ -8,11 +8,11 @@ The planned design for the remaining detectors is the version 2 contract in [con
 
 | # | Item | Status | Pull requests | What exists |
 | --- | --- | --- | --- | --- |
-| 1 | Per-template counting with Drain3 | Done | [#33](https://github.com/panshularora/Acentra_HackForgeAI/pull/33) | `detection/templates.py` mines templates from masked lines; `error_spike.py` scores each error template against its own median and MAD. It is the only alerting detector (`DETECTORS = ("error_spike",)` in `detection/detector.py`). |
-| 2 | Silence detector | Not started | loggen fault in [#27](https://github.com/panshularora/Acentra_HackForgeAI/pull/27) | The `heartbeat-stop` fault and `make incident-silence` exist; `"silence"` is in the `DetectorName` type but has no detector. |
-| 3 | New-pattern detector | Not started | loggen fault in [#27](https://github.com/panshularora/Acentra_HackForgeAI/pull/27) | The `new-error` fault exists. `error_spike` already scores a never-seen template from a history of zeros, which partly covers the case. |
+| 1 | Per-template counting with Drain3 | Done | [#33](https://github.com/panshularora/Acentra_HackForgeAI/pull/33) | `detection/templates.py` mines templates from masked lines; `error_spike.py` scores each error template against its own median and MAD. |
+| 2 | Silence detector | Done | loggen fault in [#27](https://github.com/panshularora/Acentra_HackForgeAI/pull/27) | `detection/silence.py`: per-template inter-arrival CV; `heartbeat-stop` inject from the dashboard. |
+| 3 | New-pattern detector | Done | loggen fault in [#27](https://github.com/panshularora/Acentra_HackForgeAI/pull/27) | `detection/new_pattern.py`: unseen ERROR/WARN after warm-up; defers when `error_spike` already claimed the template. |
 | 4 | PHI redactor test | Done | [#26](https://github.com/panshularora/Acentra_HackForgeAI/pull/26), [#34](https://github.com/panshularora/Acentra_HackForgeAI/pull/34) | `test_phi_never_reaches_the_store_the_feed_or_aws` in `test_api.py` checks the store, the WebSocket feed and AWS. #34 made the phone pattern more precise (see the note under the table). |
-| 5 | Flow-break detector | Not started | loggen fault in [#27](https://github.com/panshularora/Acentra_HackForgeAI/pull/27) | loggen writes `claim validated claim_id=...` and `claim adjudicated claim_id=...` (98% of claims complete within 0.3 to 3 s) and has the `flow-break` fault. |
+| 5 | Flow-break detector | Done | loggen fault in [#27](https://github.com/panshularora/Acentra_HackForgeAI/pull/27) | `detection/flow_break.py`: incomplete `claim validated` → `claim adjudicated` pairs scored with `RobustBaseline`. |
 | 6 | Explainable alerts | Partly done | [#28](https://github.com/panshularora/Acentra_HackForgeAI/pull/28), [#33](https://github.com/panshularora/Acentra_HackForgeAI/pull/33) | `detector`, `template`, `baseline_band`, `observed`, `first_bad_line` and `params` are on the alert, stored in SQLite and shown on the card. They are not in the SNS/CloudWatch message, and only `error_spike` fills them. |
 | 7 | Learning-state badge | Done | [#30](https://github.com/panshularora/Acentra_HackForgeAI/pull/30) | `LearningBadge.tsx`, driven by the `learning` object on each stats point and in `/api/health`. |
 | 8 | Benchmark against the global control with loggen faults | Partly done | [#27](https://github.com/panshularora/Acentra_HackForgeAI/pull/27) (merged), [#35](https://github.com/panshularora/Acentra_HackForgeAI/pull/35) (draft) | loggen has five faults and a seeded `simulate()`. #35 adds the frozen `GlobalErrorRateDetector` control, `tools/benchmark.py` and `make benchmark`, but has not been merged with main or run, and no results are committed. |
@@ -22,7 +22,9 @@ Accepted trade-off from #34: a standalone phone-shaped sequence such as `values 
 
 ## 2. What is left to implement
 
-loggen already has the matching faults for every missing detector (`heartbeat-stop`, `new-error`, `flow-break`), both live (`make incident-silence`, `make incident-new`, `make incident-flow`) and in `loggen.simulate(seed)`, so each detector can be tested as soon as it is written.
+Items 2, 3 and 5 (silence, new-pattern, flow-break) are implemented. The subsections below are the original design notes.
+
+loggen already has the matching faults for every detector (`heartbeat-stop`, `new-error`, `flow-break`), both live (`make incident-silence`, `make incident-new`, `make incident-flow`) and in `loggen.simulate(seed)`.
 
 All three new detectors plug into `Detector.close_bucket()` in `backend/app/detection/detector.py`: add the detector's findings to the `findings` list, add its name to `DETECTORS` (which also updates `/api/health`), and let it learn only when `learnable` is true and no incident is open, as `error_spike` does. The incident tracker already keys incidents by detector and template, so no change is needed there.
 

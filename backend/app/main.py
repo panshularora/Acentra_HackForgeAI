@@ -32,6 +32,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.services = services
         if services.publisher is not None:
             await services.publisher.start()
+            await services.pipeline.retry_undelivered_sns()
         task = asyncio.create_task(services.pipeline.run(), name="pipeline")
         logger.info("%s watching %s", settings.app_name, settings.log_path)
         try:
@@ -48,7 +49,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
-        allow_methods=["GET", "POST"],
+        allow_methods=["GET", "POST", "DELETE"],
         allow_headers=["*"],
     )
     app.include_router(router)

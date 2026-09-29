@@ -51,7 +51,9 @@ AWS_ERRORS = (BotoCoreError, ClientError)
 SNS_SUBJECT_LIMIT = 99  # SNS: "must be less than 100 characters"
 # Fail fast: a paging path that hangs for a minute is worse than one that
 # reports "failed" in two seconds and lets the dashboard show it.
-BOTO_CONFIG = Config(connect_timeout=2, read_timeout=5, retries={"max_attempts": 2})
+# Real SNS in ap-south-1 needs more than a couple of seconds; moto is local
+# and still returns well inside this budget.
+BOTO_CONFIG = Config(connect_timeout=10, read_timeout=20, retries={"max_attempts": 3})
 # Emulators accept any credentials; real AWS uses the normal boto3 chain.
 EMULATOR_CREDENTIALS = {"aws_access_key_id": "testing", "aws_secret_access_key": "testing"}
 
@@ -73,6 +75,12 @@ def alert_message(event: AlertEvent, app_name: str) -> dict[str, Any]:
         "resolved_at": data["resolved_at"],
         "top_contributors": data["top_contributors"],
         "sample_lines": data["sample_lines"],
+        "detector": data.get("detector"),
+        "template": data.get("template"),
+        "baseline_band": data.get("baseline_band"),
+        "observed": data.get("observed"),
+        "first_bad_line": data.get("first_bad_line"),
+        "params": data.get("params") or [],
     }
 
 
@@ -89,6 +97,19 @@ def email_text(event: AlertEvent, app_name: str) -> str:
         f"Anomaly score:  {alert.score:.1f} (modified z-score)",
         f"Opened at:      {alert.opened_at.isoformat()}",
     ]
+    if alert.explanation and alert.explanation.detector:
+        lines.append(f"Detector:       {alert.explanation.detector}")
+    if alert.explanation and alert.explanation.template:
+        lines.append(f"Template:       {alert.explanation.template.text}")
+    if alert.explanation and alert.explanation.baseline_band:
+        band = alert.explanation.baseline_band
+        lines.append(
+            f"Baseline:       median {band.median:g} {band.unit}, "
+            f"upper {band.upper:g} {band.unit}"
+        )
+    if alert.explanation and alert.explanation.observed is not None:
+        unit = alert.explanation.baseline_band.unit if alert.explanation.baseline_band else ""
+        lines.append(f"Observed:       {alert.explanation.observed:g} {unit}".rstrip())
     if alert.resolved_at is not None:
         lines.append(f"Resolved at:    {alert.resolved_at.isoformat()}")
     groups = alert.top_contributors
@@ -127,7 +148,9 @@ class AlertPublisher:
     def __init__(self, settings: Settings, on_delivery: DeliveryCallback | None = None) -> None:
         self.settings = settings
         self.on_delivery = on_delivery
-        self.topic_arn: str | None = None
+        # Publish-only IAM users cannot CreateTopic. Pin the ARN immediately
+        # so a failed ensure_resources never leaves topic_arn unset.
+        self.topic_arn: str | None = (settings.sns_topic_arn or "").strip() or None
         self.log_group = settings.cw_log_group if settings.cw_enabled else None
         self._log_stream = settings.cw_log_stream
         self._logs_ready = False
@@ -228,15 +251,17 @@ class AlertPublisher:
         return ChannelDelivery("sent")
 
     def _ensure_topic(self) -> str | None:
-        if self.settings.sns_topic_arn:
-            self.topic_arn = self.settings.sns_topic_arn
+        configured = (self.settings.sns_topic_arn or "").strip() or None
+        if configured:
+            self.topic_arn = configured
+            return self.topic_arn
+        if self.topic_arn:
             return self.topic_arn
         try:
             # CreateTopic is idempotent: it returns the existing ARN if present.
             self.topic_arn = self._sns.create_topic(Name=self.settings.sns_topic_name)["TopicArn"]
         except AWS_ERRORS as error:
             logger.warning("could not create SNS topic: %s", error)
-            self.topic_arn = None
         return self.topic_arn
 
     def _ensure_log_stream(self) -> bool:

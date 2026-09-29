@@ -8,6 +8,7 @@ from app.alerts.publisher import AlertPublisher
 from app.alerts.store import AlertStore, StatsHistory
 from app.api.ws import ConnectionManager
 from app.config import Settings
+from app.demo.injector import FaultInjector
 from app.detection.detector import Detector, DetectorConfig
 from app.ingest.parser import LogParser
 from app.ingest.tailer import FileTailer
@@ -29,9 +30,11 @@ class Services:
     detector: Detector
     pipeline: Pipeline
     publisher: AlertPublisher | None
+    injector: FaultInjector
 
     def close(self) -> None:
         """Release files and database connections."""
+        self.injector.close()
         self.tailer.close()
         self.store.close()
 
@@ -62,4 +65,7 @@ def build_services(settings: Settings) -> Services:
     )
     if publisher is not None:
         publisher.on_delivery = pipeline.record_delivery
-    return Services(settings, store, stats, clients, tailer, parser, detector, pipeline, publisher)
+    injector = FaultInjector(settings.log_path)
+    return Services(
+        settings, store, stats, clients, tailer, parser, detector, pipeline, publisher, injector
+    )

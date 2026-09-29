@@ -19,6 +19,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import StrEnum
 
+from app.detection.origin import suspected_origin
 from app.models import Alert, Explanation, Severity, TopContributors
 
 
@@ -69,6 +70,39 @@ class WindowContext:
     baseline_median: float
 
 
+def _service_of(explanation: Explanation) -> str | None:
+    return explanation.template.service if explanation.template else None
+
+
+def _alerting_services(
+    findings: list[Finding],
+    incidents: dict[str, Alert],
+    streaks: dict[str, int],
+    resolve_after: int,
+) -> set[str]:
+    """Services that will still have an open incident after this bucket."""
+    alerting: set[str] = set()
+    reported = {finding.key for finding in findings}
+    for finding in findings:
+        service = _service_of(finding.explanation)
+        if service:
+            alerting.add(service)
+    for key, incident in incidents.items():
+        if key not in reported and streaks.get(key, 0) + 1 >= resolve_after:
+            continue
+        service = _service_of(incident.explanation)
+        if service:
+            alerting.add(service)
+    return alerting
+
+
+def _with_origin(finding: Finding, alerting: set[str]) -> Finding:
+    origin = suspected_origin(_service_of(finding.explanation), alerting)
+    if origin == finding.explanation.suspected_origin:
+        return finding
+    return replace(finding, explanation=replace(finding.explanation, suspected_origin=origin))
+
+
 class IncidentTracker:
     """Open incidents by key, advanced once per closed bucket."""
 
@@ -93,7 +127,9 @@ class IncidentTracker:
         """Apply this bucket's findings; return what changed, in a stable order."""
         events: list[AlertEvent] = []
         reported = set()
-        for finding in findings:
+        alerting = _alerting_services(findings, self._incidents, self._normal_streaks, self._resolve_after)
+        annotated = [_with_origin(finding, alerting) for finding in findings]
+        for finding in annotated:
             reported.add(finding.key)
             self._normal_streaks.pop(finding.key, None)
             if finding.key in self._incidents:

@@ -35,6 +35,37 @@ describe('StatusBar', () => {
     expect(screen.getByText('ClaimsWatch')).toBeInTheDocument();
   });
 
+  it('keeps the live label when the newest bucket is fresh', () => {
+    render(
+      <StatusBar
+        connection="live"
+        baseline={{ kind: 'ready' }}
+        health={health}
+        now={Date.parse('2026-09-28T13:05:18Z')}
+        lastUpdate="2026-09-28T13:05:10Z"
+        bucketSeconds={10}
+      />,
+    );
+    expect(screen.getByRole('status', { name: /Live stream: Live/ })).toHaveTextContent(
+      'Live · 8s ago',
+    );
+  });
+
+  it('calls out a delayed stream instead of a green live dot', () => {
+    render(
+      <StatusBar
+        connection="live"
+        baseline={{ kind: 'ready' }}
+        health={health}
+        now={Date.parse('2026-09-28T13:05:40Z')}
+        lastUpdate="2026-09-28T13:05:10Z"
+        bucketSeconds={10}
+      />,
+    );
+    expect(screen.getByRole('status')).toHaveClass('connection--delayed');
+    expect(screen.getByRole('status')).toHaveTextContent('Live · delayed');
+  });
+
   it('replaces the learning badge with "Ingest retrying" while monitoring is degraded', () => {
     render(
       <StatusBar

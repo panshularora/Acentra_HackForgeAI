@@ -1,12 +1,21 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { makeAlert } from '../test/fixtures';
+import { makeAlert, makeExplainedAlert } from '../test/fixtures';
 import { AlertFeed } from './AlertFeed';
 
 const NOW = Date.parse('2026-09-28T13:10:00Z');
 
 const alerts = [
-  makeAlert({ id: 'c1', severity: 'CRITICAL', summary: 'Claims DB timeouts' }),
+  makeExplainedAlert({
+    id: 'c1',
+    severity: 'CRITICAL',
+    summary: 'Claims DB timeouts',
+    template: {
+      id: '17',
+      text: 'ERROR claim-adjudication msg="DB connection timeout"',
+      service: 'claim-adjudication',
+    },
+  }),
   makeAlert({
     id: 'w1',
     severity: 'WARNING',
@@ -14,6 +23,12 @@ const alerts = [
     resolved_at: '2026-09-28T12:59:00Z',
     opened_at: '2026-09-28T12:55:00Z',
     summary: 'Eligibility API 503s',
+    template: { id: '9', text: 'WARN eligibility-check', service: 'eligibility-check' },
+    top_contributors: {
+      services: [{ value: 'eligibility-check', count: 8, share: 1 }],
+      messages: [{ value: 'upstream 503', count: 8, share: 1 }],
+      source_ips: [],
+    },
   }),
 ];
 
@@ -65,20 +80,58 @@ describe('AlertFeed', () => {
     expect(headings).toEqual(['Older critical', 'Newer warning', 'Resolved critical']);
   });
 
-  it('filters by status and severity', async () => {
+  it('filters by status and severity, with counts on each chip', async () => {
     const user = userEvent.setup();
     renderFeed();
 
-    await user.click(screen.getByRole('button', { name: 'Resolved' }));
+    expect(screen.getByRole('button', { name: 'Status Open (1)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Status Resolved (1)' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Status Resolved (1)' }));
     expect(screen.queryByText('Claims DB timeouts')).not.toBeInTheDocument();
     expect(screen.getByText('Eligibility API 503s')).toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: 'Critical' }));
-    expect(screen.getByText('No alerts match these filters.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Critical' })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'Status Resolved (1)' })).toHaveAttribute(
       'aria-pressed',
       'true',
     );
+
+    await user.click(screen.getByRole('button', { name: 'Severity Critical (0)' }));
+    expect(screen.getByText(/No incidents match/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Show all 2' })).toBeInTheDocument();
+  });
+
+  it('searches across summary and template text', async () => {
+    const user = userEvent.setup();
+    renderFeed();
+    await user.type(screen.getByRole('searchbox', { name: 'Search incidents' }), 'Claims DB');
+    expect(screen.getByText('Claims DB timeouts')).toBeInTheDocument();
+    expect(screen.queryByText('Eligibility API 503s')).not.toBeInTheDocument();
+  });
+
+  it('filters by service and lets a second click clear it', async () => {
+    const user = userEvent.setup();
+    renderFeed();
+    await user.click(screen.getByRole('button', { name: 'Service claim-adjudication (1)' }));
+    expect(screen.getByText('Claims DB timeouts')).toBeInTheDocument();
+    expect(screen.queryByText('Eligibility API 503s')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Service claim-adjudication (1)' }));
+    expect(screen.getByText('Eligibility API 503s')).toBeInTheDocument();
+  });
+
+  it('tells the operator when a live arrival is hidden by the current chips', () => {
+    renderFeed({
+      filter: {
+        status: 'resolved',
+        severity: 'all',
+        service: null,
+        query: '',
+      },
+      onFilterChange: vi.fn(),
+      liveArrivals: { c1: NOW - 1_000 },
+    });
+    expect(
+      screen.getByRole('button', { name: /1 new incident hidden by filters/ }),
+    ).toBeInTheDocument();
   });
 
   it('explains the empty state before any incident', () => {

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { arnResourceName, formatCount, formatRelative } from '../lib/format';
 import { deliveryTarget } from '../lib/delivery';
 import type { Alert, DeliveryStatus, Health } from '../types';
@@ -6,6 +7,7 @@ interface DeliveryPanelProps {
   health: Health | null;
   alerts: Alert[];
   now: number;
+  onRetry?: () => Promise<number> | number | void;
 }
 
 type Channel = 'sns' | 'cloudwatch';
@@ -81,9 +83,22 @@ function ChannelRow({
 }
 
 /** Where alerts are delivered and whether the latest one got there. */
-export function DeliveryPanel({ health, alerts, now }: DeliveryPanelProps) {
+export function DeliveryPanel({ health, alerts, now, onRetry }: DeliveryPanelProps) {
   const topic = health ? arnResourceName(health.aws.sns_topic_arn) : null;
   const group = health?.aws.cloudwatch_log_group ?? null;
+  const failed = alerts.filter((alert) => alert.delivery.sns.status === 'failed').length;
+  const [retryState, setRetryState] = useState<'idle' | 'pending' | 'error'>('idle');
+
+  const retry = async () => {
+    if (!onRetry || retryState === 'pending') return;
+    setRetryState('pending');
+    try {
+      await onRetry();
+      setRetryState('idle');
+    } catch {
+      setRetryState('error');
+    }
+  };
 
   return (
     <section className="panel delivery-panel" aria-labelledby="delivery-title">
@@ -94,6 +109,20 @@ export function DeliveryPanel({ health, alerts, now }: DeliveryPanelProps) {
           </h2>
           <p className="panel__subtitle">{deliveryTarget(health)}</p>
         </div>
+        {onRetry && failed > 0 && (
+          <button
+            type="button"
+            className="button button--small"
+            onClick={() => void retry()}
+            disabled={retryState === 'pending'}
+          >
+            {retryState === 'pending'
+              ? 'Retrying\u2026'
+              : retryState === 'error'
+                ? 'Retry failed sends'
+                : `Retry ${failed} failed`}
+          </button>
+        )}
       </header>
       <dl className="delivery-panel__rows">
         <ChannelRow

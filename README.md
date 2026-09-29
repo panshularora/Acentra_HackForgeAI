@@ -29,7 +29,7 @@ Built for the Acentra Health "Build to Care" code-a-thon, problem statement PS1:
 | 7 | Display alerts as they are generated | `frontend/src/components/AlertFeed.tsx`, `AlertCard.tsx` | `AlertFeed.test.tsx`, `AlertCard.test.tsx`; live demo |
 | 8 | Push alerts to CloudWatch Logs or SNS | `backend/app/alerts/publisher.py` | `test_publisher.py` (moto): SNS -> SQS read-back with PHI check, CloudWatch read-back, failure handling |
 
-Beyond the minimum: PHI masking (`ingest/masking.py`), top-contributor attribution with a one-line summary (`detection/contributors.py`), incident lifecycle with acknowledgement, per-channel delivery status on every alert, and a deterministic replay benchmark (`tools/replay.py`).
+Beyond the minimum: PHI masking (`ingest/masking.py`), top-contributor attribution with a one-line summary (`detection/contributors.py`), silence / new-pattern / flow-break detectors, cascade origin on related incidents, one-click inject and stop from the dashboard, incident lifecycle with acknowledgement, per-channel delivery status on every alert, and a deterministic replay benchmark (`tools/replay.py`).
 
 ## Architecture
 
@@ -71,6 +71,7 @@ No machine-learning model: every alert comes from a robust statistic that can be
 5. **Minimum-count guard.** No alert unless the template has at least 5 errors in the window and the window holds at least 50 lines.
 6. **Incidents.** One alert per incident, keyed by detector and template: the first anomalous bucket opens it, later ones update it in place and a higher severity escalates it. Three consecutive normal buckets resolve it. While any incident is open no baseline learns, so an outage never becomes the new normal.
 7. **Explanation.** Each alert names its detector and template, the baseline band it broke (median and upper edge, in errors per 60 s), the observed count, the first masked line that crossed the band, and the dominant parameter values. The summary is one sentence, for example `74% of errors come from claim-adjudication: DB connection timeout` or `179 failed logins from 10.4.2.17 in the last 60s`, where the IP comes from the template's parameters.
+8. **Silence, new pattern, flow break.** A heartbeat template with a steady cadence fires `silence` when its gap blows out. An ERROR/WARN template never seen during warm-up fires `new_pattern` (error_spike keeps ownership of templates it already claimed). Incomplete `claim validated` → `claim adjudicated` pairs are scored as `flow_break`. Related open incidents get a `suspected_origin` label from a static service graph; they stay separate alerts.
 
 The global error rate is still computed, scored against its own median and MAD, and drawn on the dashboard chart; it is the control the per-template detector is compared with, but it no longer raises alerts itself.
 
@@ -131,17 +132,17 @@ Then `make incident-db`, `make incident-auth`, `make sns-tail` and `make feed` (
 
 ### Log generator and faults
 
-`tools/loggen.py` writes traffic from five claims services with a slightly drifting 2% background error rate, plus two steady signals: `heartbeat service=<name> ok` from `eligibility-sync` and `payment-reconciler` every 5 s, and a claim flow where `claim validated claim_id=<id>` is followed 0.3 to 3 s later by `claim adjudicated claim_id=<id>` for 98% of claims. Member IDs and names are random and masked by the parser like every other line. Five faults can be injected live or in a seeded offline simulation (`loggen.simulate`). Only the first three are detected today; the silence and flow-break detectors are not written yet (see [docs/ROADMAP.md](docs/ROADMAP.md)), so use `db-outage`, `cred-stuffing` and `new-error` in a demo:
+`tools/loggen.py` writes traffic from five claims services with a slightly drifting 2% background error rate, plus two steady signals: `heartbeat service=<name> ok` from `eligibility-sync` and `payment-reconciler` every 5 s, and a claim flow where `claim validated claim_id=<id>` is followed 0.3 to 3 s later by `claim adjudicated claim_id=<id>` for 98% of claims. Member IDs and names are random and masked by the parser like every other line. Five faults can be injected and stopped from the dashboard Demo faults panel (`POST` / `DELETE /api/faults`), from `make incident-*`, or in a seeded offline simulation (`loggen.simulate`):
 
-| Fault | Make target | What happens |
-| --- | --- | --- |
-| `db-outage` | `make incident-db` | claim-adjudication times out on its database (3 errors/s) |
-| `cred-stuffing` | `make incident-auth` | one IP sends failed logins to member-auth (6 errors/s) |
-| `new-error` | `make incident-new` | a never-seen `TLS certificate verification failed for payer gateway` error (0.5/s) |
-| `heartbeat-stop` | `make incident-silence` | eligibility-sync stops sending heartbeats (not detected yet) |
-| `flow-break` | `make incident-flow` | validated claims stop being adjudicated (not detected yet) |
+| Fault | Make target | Detector | What happens |
+| --- | --- | --- | --- |
+| `db-outage` | `make incident-db` | `error_spike` | claim-adjudication times out on its database (3 errors/s) |
+| `cred-stuffing` | `make incident-auth` | `error_spike` | one IP sends failed logins to member-auth (6 errors/s) |
+| `new-error` | `make incident-new` | `new_pattern` | a never-seen `TLS certificate verification failed for payer gateway` error (0.5/s) |
+| `heartbeat-stop` | `make incident-silence` | `silence` | eligibility-sync stops sending heartbeats |
+| `flow-break` | `make incident-flow` | `flow_break` | validated claims stop being adjudicated |
 
-The first three append their own lines. `heartbeat-stop` and `flow-break` remove lines, so they need `make loggen` running: the incident command records the fault in `logs/app.log.faults.json` until it ends, and the generator drops the affected lines meanwhile.
+The first three append their own lines. `heartbeat-stop` and `flow-break` remove lines, so they need `make loggen` running: inject records the fault in `logs/app.log.faults.json` until it ends or you hit Stop, and the generator drops the affected lines meanwhile.
 
 ## Demo
 
@@ -161,8 +162,8 @@ The backend suite has one test file per module, including moto-backed AWS delive
 
 | Suite | Result |
 | --- | --- |
-| Backend (`make check`) | 233 tests passing; ruff and mypy `--strict` clean |
-| Frontend (`npm test`, Node 22) | 164 tests passing; ESLint, `tsc`, Prettier and production build clean |
+| Backend (`pytest`, excluding three pre-existing Windows `test_tailer` file-lock/CRLF cases) | 242 tests passing |
+| Frontend (`npm test`, Node 22) | 192 tests passing |
 | Replay (`make replay`, 48,363 lines) | DB outage detected in 10 s (1 bucket), credential stuffing in 10 s (1 bucket), 0 false alarms |
 
 ## Project structure
@@ -177,7 +178,9 @@ backend/
     services.py          component wiring
     ingest/              tailer.py, parser.py, masking.py
     detection/           templates.py (Drain3), window.py, baseline.py, error_spike.py,
+                         silence.py, new_pattern.py, flow_break.py, origin.py,
                          incidents.py, severity.py, contributors.py, detector.py
+    demo/                injector.py (dashboard inject / stop)
     alerts/              store.py (SQLite), publisher.py (SNS + CloudWatch Logs)
     api/                 routes.py (REST + /ws), ws.py (connection manager)
   tests/                 one test file per module
@@ -229,7 +232,7 @@ The dashboard (`frontend/`, React 19, TypeScript, Vite, Recharts, and React Thre
 - **Error-rate chart.** The 60-second error rate against the learned normal band, with anomalous buckets marked.
 - **Incident feed.** One card per incident, filterable by state and severity: severity as text, the detector, the one-line summary, and under "Why it fired" the template, its normal band against the observed count, the masked first bad line, and the share of errors by service, message and source IP. Each card shows SNS and CloudWatch delivery status and has an Acknowledge button.
 - **Alert delivery.** Which SNS and CloudWatch target alerts go to, and whether the last alert got there.
-- **Demo faults.** Copyable `make` and Docker commands for the three faults the detector catches. The backend has no API to inject faults, so they are run from a terminal.
+- **Demo faults.** Inject or Stop each of the five faults from the dashboard (`POST` / `DELETE /api/faults`). Copyable `make` and Docker commands stay as a fallback.
 
 Window length, bucket size and baseline warm-up are read from `/api/health`, so labels follow the backend configuration. A badge in the header says whether the detector is still learning its baseline or monitoring ("Monitoring, 21 templates"); until the baseline is learned, the dashboard says that no alerts can fire yet.
 

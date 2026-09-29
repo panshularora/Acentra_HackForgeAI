@@ -16,11 +16,14 @@ def make_event(
     raw: str | None = None,
     template_id: str | None = None,
     params: tuple[tuple[str, str], ...] = (),
+    ts: datetime | None = None,
 ) -> LogEvent:
     """Build a LogEvent with sensible defaults for tests."""
-    raw = raw or f'2026-09-28T13:00:00Z {level} {service} msg="{message}"'
+    moment = ts or T0
+    stamp = moment.strftime("%Y-%m-%dT%H:%M:%SZ")
+    raw = raw or f'{stamp} {level} {service} msg="{message}"'
     return LogEvent(
-        ts=T0,
+        ts=moment,
         level=level,
         service=service,
         message=message,

@@ -18,7 +18,7 @@ from app.ingest.tailer import FileTailer
 from app.models import ChannelDelivery, Delivery
 from app.pipeline import AlertSink, Pipeline
 from tests.aws import receive_envelopes, subscribe_queue
-from tests.factories import T0, make_event
+from tests.factories import T0, make_alert, make_event
 
 
 class RecordingSink:
@@ -52,6 +52,26 @@ async def run_incident(pipeline: Pipeline) -> None:
         await feed(pipeline, bucket, 300, errors)
 
 
+async def test_retry_undelivered_sns_requeues_failed_alerts(tmp_path: Path) -> None:
+    sink = RecordingSink()
+    pipeline = build(tmp_path, sink)
+    failed = make_alert(
+        "fail1",
+        delivery=Delivery(sns=ChannelDelivery("failed", error="SNS topic unavailable")),
+    )
+    sent = make_alert("ok1", delivery=Delivery(sns=ChannelDelivery("sent", "m-1")))
+    pipeline.store.save_detection(failed, reset_delivery=True)
+    pipeline.store.save_detection(sent, reset_delivery=True)
+
+    queued = await pipeline.retry_undelivered_sns()
+
+    assert queued == 1
+    assert [event.alert.id for event in sink.submitted] == ["fail1"]
+    stored = pipeline.store.get("fail1")
+    assert stored is not None
+    assert stored.delivery.sns.status == "pending"
+
+
 async def test_only_open_escalate_and_resolve_are_sent_to_aws(tmp_path: Path) -> None:
     sink = RecordingSink()
     pipeline = build(tmp_path, sink)
@@ -72,7 +92,15 @@ async def test_incident_lifecycle_reaches_sns_as_three_messages_in_order(
     for key in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"):
         monkeypatch.setenv(key, "testing")
     with mock_aws():
-        publisher = AlertPublisher(Settings(aws_endpoint_url=None, aws_region="us-east-1"))
+        publisher = AlertPublisher(
+            Settings(
+                aws_endpoint_url=None,
+                aws_region="us-east-1",
+                sns_topic_arn=None,
+                sns_topic_name="claimswatch-alerts",
+                cw_enabled=True,
+            )
+        )
         await publisher.start()
         assert publisher.topic_arn is not None
         queue_url = subscribe_queue(publisher.topic_arn)

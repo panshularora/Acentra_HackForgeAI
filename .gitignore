@@ -24,6 +24,7 @@ pnpm-debug.log*
 *.db
 *.db-journal
 logs/
+eval/
 
 # Editors / OS
 .vscode/

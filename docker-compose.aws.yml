@@ -1,0 +1,20 @@
+# Overlay for real AWS instead of moto.
+# Usage (from the repo root, with .env populated):
+#   docker compose -f docker-compose.yml -f docker-compose.aws.yml up --build
+#
+# The IAM user is publish-only on SNS_TOPIC_ARN; CloudWatch stays off.
+
+services:
+  moto:
+    profiles: ["disabled"]
+
+  backend:
+    env_file: .env
+    environment:
+      AWS_ENDPOINT_URL: ""
+      AWS_REGION: ${AWS_REGION:-ap-south-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      SNS_TOPIC_ARN: ${SNS_TOPIC_ARN}
+      CW_ENABLED: "false"
+    depends_on: []

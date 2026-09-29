@@ -2,22 +2,50 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { FaultPanel } from './FaultPanel';
 
+vi.mock('../api/client', () => ({
+  injectFault: vi.fn(() =>
+    Promise.resolve({ name: 'db-outage', until: '2026-09-29T00:00:00Z', mode: 'lines' }),
+  ),
+  stopFault: vi.fn(() => Promise.resolve({ stopped: 'db-outage', faults: [] })),
+  stopAllFaults: vi.fn(() => Promise.resolve({ stopped: ['db-outage'], faults: [] })),
+}));
+
 describe('FaultPanel', () => {
-  it('offers only the faults the live detector catches', () => {
+  it('offers every demo fault including silence and flow-break', () => {
     render(<FaultPanel />);
     const list = screen.getAllByRole('list')[0] as HTMLElement;
     const items = within(list).getAllByRole('listitem');
-    expect(items).toHaveLength(3);
+    expect(items).toHaveLength(5);
     expect(list).toHaveTextContent('make incident-db');
-    expect(list).toHaveTextContent('make incident-auth');
-    expect(list).toHaveTextContent('make incident-new');
-    expect(list).not.toHaveTextContent('incident-silence');
-    expect(list).not.toHaveTextContent('incident-flow');
+    expect(list).toHaveTextContent('make incident-silence');
+    expect(list).toHaveTextContent('make incident-flow');
   });
 
-  it('marks heartbeat-stop and flow-break as not detected yet', () => {
+  it('injects a fault through the API', async () => {
+    const user = userEvent.setup();
+    const { injectFault } = await import('../api/client');
     render(<FaultPanel />);
-    expect(screen.getByText(/not detected yet/)).toHaveTextContent('heartbeat-stop, flow-break');
+    await user.click(screen.getAllByRole('button', { name: 'Inject' })[0] as HTMLElement);
+    expect(injectFault).toHaveBeenCalledWith('db-outage', 45);
+    expect(await screen.findByRole('button', { name: 'Stop' })).toBeInTheDocument();
+  });
+
+  it('stops a live fault through the API', async () => {
+    const user = userEvent.setup();
+    const { stopFault } = await import('../api/client');
+    render(<FaultPanel activeNames={['db-outage']} />);
+    await user.click(screen.getByRole('button', { name: 'Stop' }));
+    expect(stopFault).toHaveBeenCalledWith('db-outage');
+    expect(await screen.findAllByRole('button', { name: 'Inject' })).toHaveLength(5);
+  });
+
+  it('stops every live fault at once', async () => {
+    const user = userEvent.setup();
+    const { stopAllFaults } = await import('../api/client');
+    render(<FaultPanel activeNames={['db-outage', 'heartbeat-stop']} />);
+    await user.click(screen.getByRole('button', { name: 'Stop all' }));
+    expect(stopAllFaults).toHaveBeenCalled();
+    expect(await screen.findAllByRole('button', { name: 'Inject' })).toHaveLength(5);
   });
 
   it('switches to Docker commands', async () => {

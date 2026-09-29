@@ -127,6 +127,8 @@ export interface Alert {
   /** Masked raw line that first crossed the band. */
   first_bad_line?: string | null;
   params?: ExtractedParam[] | null;
+  /** Most upstream alerting service when several cards are part of a cascade. */
+  suspected_origin?: string | null;
 }
 
 /** Detector timing reported by /api/health, used for chart labels and warm-up progress. */
@@ -168,6 +170,14 @@ export interface Health {
   pipeline: PipelineCounters;
   /** Contract v2: same object as StatsPoint.learning. */
   learning?: LearningState | null;
+  /** Demo faults currently injected from the dashboard. */
+  faults?: FaultInjection[];
+}
+
+export interface FaultInjection {
+  name: string;
+  until: string;
+  mode: 'lines' | 'suppress';
 }
 
 /** Server -> client WebSocket messages, discriminated on `type`. */

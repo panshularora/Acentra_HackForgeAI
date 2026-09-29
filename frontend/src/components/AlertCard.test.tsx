@@ -48,6 +48,14 @@ describe('AlertCard', () => {
     expect(screen.getByText('97%')).toBeInTheDocument();
   });
 
+  it('filters the feed when a service contributor is clicked', async () => {
+    const user = userEvent.setup();
+    const onSelectService = vi.fn();
+    render(<AlertCard alert={makeAlert()} now={NOW} onSelectService={onSelectService} />);
+    await user.click(screen.getByRole('button', { name: 'claim-adjudication' }));
+    expect(onSelectService).toHaveBeenCalledWith('claim-adjudication');
+  });
+
   it('renders masked sample lines in monospace with placeholders set apart', () => {
     const { container } = render(<AlertCard alert={makeAlert()} now={NOW} />);
     const samples = container.querySelector('.samples__lines');

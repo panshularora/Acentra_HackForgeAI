@@ -110,6 +110,33 @@ class Pipeline:
             await self.clients.broadcast("alert", alert.to_dict())
         return alert
 
+    async def retry_undelivered_sns(self, limit: int = 50) -> int:
+        """Re-queue recent alerts whose SNS delivery failed or is still pending.
+
+        Used after startup once the topic ARN is known, so a previous run that
+        could not create the topic does not leave the dashboard stuck on failed.
+        """
+        if self.sink is None:
+            return 0
+        queued = 0
+        for alert in self.store.list_recent(limit):
+            if alert.delivery.sns.status not in {"failed", "pending"}:
+                continue
+            pending = Delivery(
+                sns=ChannelDelivery("pending"),
+                cloudwatch=alert.delivery.cloudwatch,
+            )
+            stored = self.store.set_delivery(alert.id, pending)
+            if stored is None:
+                continue
+            await self.clients.broadcast("alert", stored.to_dict())
+            change = AlertChange.RESOLVED if stored.status == "resolved" else AlertChange.OPENED
+            self.sink.submit(AlertEvent(change, stored))
+            queued += 1
+        if queued:
+            logger.info("re-queued %d alert(s) for SNS delivery", queued)
+        return queued
+
     async def _handle_alert(self, change: AlertChange, alert: Alert) -> None:
         initial: DeliveryState = "pending" if self.sink else "disabled"
         alert.delivery = Delivery(sns=ChannelDelivery(initial), cloudwatch=ChannelDelivery(initial))

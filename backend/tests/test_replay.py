@@ -64,7 +64,12 @@ def test_cli_writes_log_and_exits_zero(tmp_path: Path, capsys: pytest.CaptureFix
 
 
 def test_missed_incident_is_reported() -> None:
-    blind = DetectorConfig(min_errors=10**6)
+    blind = DetectorConfig(
+        min_errors=10**6,
+        new_pattern_min_count=10**6,
+        silence_min_gaps=10**6,
+        flow_timeout_seconds=10**6,
+    )
 
     report = replay.replay(config=blind)
 

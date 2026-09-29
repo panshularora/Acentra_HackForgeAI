@@ -4,6 +4,7 @@ import {
   fetchAlerts,
   fetchHealth,
   fetchStats,
+  retryDelivery,
   alertStreamUrl,
 } from '../api/client';
 import {
@@ -35,6 +36,7 @@ export function backoffDelay(attempt: number, random: () => number = Math.random
 
 export interface AlertStream extends AlertStreamState {
   acknowledge: (id: string) => Promise<void>;
+  retryDelivery: () => Promise<number>;
 }
 
 /**
@@ -51,7 +53,6 @@ export function useAlertStream(url: string = alertStreamUrl()): AlertStream {
   useEffect(() => {
     let socket: WebSocket | null = null;
     let retryTimer: ReturnType<typeof setTimeout> | undefined;
-    let healthTimer: ReturnType<typeof setInterval> | undefined;
     let attempt = 0;
     let disposed = false;
     const requests = new AbortController();
@@ -67,8 +68,8 @@ export function useAlertStream(url: string = alertStreamUrl()): AlertStream {
         dispatch({ type: 'health', health });
         dispatch({ type: 'backfill', stats, alerts });
       } catch {
-        // The live stream keeps working without history; the next
-        // reconnect will try the backfill again.
+        // REST can fail while the socket is still up (or the other way around);
+        // the next poll or reconnect tries again.
       }
     };
 
@@ -96,8 +97,6 @@ export function useAlertStream(url: string = alertStreamUrl()): AlertStream {
         attempt = 0;
         dispatch({ type: 'connection', state: 'live' });
         void backfill();
-        clearInterval(healthTimer);
-        healthTimer = setInterval(() => void pollHealth(), HEALTH_POLL_MS);
       };
       ws.onmessage = (event: MessageEvent) => {
         const message = parseWsMessage(event.data);
@@ -106,13 +105,17 @@ export function useAlertStream(url: string = alertStreamUrl()): AlertStream {
       ws.onclose = () => {
         if (disposed || socket !== ws) return;
         socket = null;
-        clearInterval(healthTimer);
         scheduleReconnect();
       };
       // Errors are always followed by a close event, which drives the retry.
       ws.onerror = () => undefined;
     }
 
+    // History and health do not wait for the socket: a dashboard whose
+    // WebSocket proxy is down still shows the last incidents from REST, and
+    // ingest degradation is visible while reconnecting.
+    void backfill();
+    const healthTimer = setInterval(() => void pollHealth(), HEALTH_POLL_MS);
     connect();
 
     return () => {
@@ -136,5 +139,10 @@ export function useAlertStream(url: string = alertStreamUrl()): AlertStream {
     dispatch({ type: 'alertUpdated', alert });
   }, []);
 
-  return { ...state, acknowledge };
+  const retry = useCallback(async () => {
+    const result = await retryDelivery();
+    return result.queued;
+  }, []);
+
+  return { ...state, acknowledge, retryDelivery: retry };
 }

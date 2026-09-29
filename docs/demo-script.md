@@ -23,7 +23,9 @@ cd frontend && npm install && npm run dev             # 4. dashboard on :5173
 
 Open a spare terminal for the incident commands and another running
 `make sns-tail` (shows alerts as SNS delivers them). With Docker, prefix the
-incident commands with `docker compose exec loggen` (see the README).
+incident commands with `docker compose exec loggen` (see the README). The
+dashboard Demo faults panel can inject and stop the same faults without a
+terminal.
 
 Check: the header says "Live" and "Monitoring", the status hero says "All
 clear", the chart shows a flat line inside the shaded band, and the incident

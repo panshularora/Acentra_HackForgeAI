@@ -244,6 +244,7 @@ class Explanation:
     observed: float | None = None
     first_bad_line: str | None = None
     params: list[ParamValue] = field(default_factory=list)
+    suspected_origin: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Serialise to the contract's explanation fields (merged into the Alert JSON)."""
@@ -254,6 +255,7 @@ class Explanation:
             "observed": _round_or_none(self.observed, 4),
             "first_bad_line": self.first_bad_line,
             "params": [p.to_dict() for p in self.params],
+            "suspected_origin": self.suspected_origin,
         }
 
     @classmethod
@@ -269,6 +271,7 @@ class Explanation:
             observed=None if observed is None else float(observed),
             first_bad_line=data.get("first_bad_line"),
             params=[ParamValue.from_dict(p) for p in data.get("params", [])],
+            suspected_origin=data.get("suspected_origin"),
         )
 
 

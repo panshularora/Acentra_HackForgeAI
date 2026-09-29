@@ -10,11 +10,19 @@ from pathlib import Path
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# backend/app/config.py -> repository root, so `.env` loads whether uvicorn
+# is started from the repo root or from backend/.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
 
 class Settings(BaseSettings):
     """Application settings. Field names map to upper-case environment variables."""
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=(".env", str(_REPO_ROOT / ".env")),
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
     app_name: str = "ClaimsWatch"
 
@@ -62,6 +70,19 @@ class Settings(BaseSettings):
 
     # An incident resolves after this many consecutive normal buckets.
     resolve_after_buckets: int = Field(default=3, ge=1)
+
+    # Silence: a steady template (low CV of inter-arrival gaps) is overdue.
+    silence_factor: float = Field(default=3.0, gt=1)
+    silence_min_seconds: float = Field(default=20.0, gt=0)
+    silence_max_cv: float = Field(default=0.25, gt=0)
+    silence_min_gaps: int = Field(default=6, ge=2)
+
+    # New-pattern: unseen ERROR/WARN template, minimum occurrences after warm-up.
+    new_pattern_min_count: int = Field(default=2, ge=1)
+
+    # Flow-break: validated claim still pending after this many seconds.
+    flow_timeout_seconds: float = Field(default=5.0, gt=0)
+    flow_map_cap: int = Field(default=10_000, ge=16)
 
     # How much StatsPoint history is kept in memory for /api/stats.
     stats_history_minutes: int = Field(default=60, gt=0)

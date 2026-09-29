@@ -17,6 +17,10 @@ Backend: FastAPI on :8000. Frontend: Vite on :5173 with dev proxy `/api` and `/w
 - GET /api/stats?minutes=10 -> {"points":[StatsPoint,...]} oldest first
 - GET /api/alerts?limit=50 -> {"alerts":[Alert,...]} newest first (by opened_at)
 - POST /api/alerts/{id}/ack -> Alert (sets acknowledged=true)  [small extra]
+- GET /api/faults -> {"faults":[{"name":str,"until":iso,"mode":"lines"|"suppress"}]}
+- POST /api/faults {"name":str,"duration":number?} -> one FaultStatus
+- DELETE /api/faults/{name} -> {"stopped":str,"faults":[...]}  (idempotent for a known idle name)
+- DELETE /api/faults -> {"stopped":[str,...],"faults":[...]}
 
 ### WebSocket /ws  (server -> client JSON messages; client sends nothing required)
 Every message: {"type": "stats" | "alert", "data": ...}
@@ -111,6 +115,7 @@ SNS message is sent for them, so the inbox shows "opened" with no follow-up.
 "detector": {"window_seconds": int, "bucket_seconds": int, "baseline_min_buckets": int,
              "detectors": ["error_spike","silence","new_pattern","flow_break"]}
 "learning": same object as in StatsPoint.
+"faults": [{"name":str,"until":iso,"mode":"lines"|"suppress"}]  // live demo injects
 
 ### SNS
 One message on open, escalate and resolve, with an event field "opened" | "escalated" | "resolved".

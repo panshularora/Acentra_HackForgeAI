@@ -25,9 +25,8 @@ with Drei for the 3D detector view. Plain CSS driven by the tokens in
   meaning when WebGL is unavailable or the context is lost.
 - **Error-rate chart**, **incident feed** (open incidents show why they fired,
   resolved ones fold that away), **alert delivery** (SNS / CloudWatch target
-  and whether the last alert got there) and **demo faults** (copyable commands
-  for the three faults the live detector catches; the backend has no API to
-  inject faults).
+  and whether the last alert got there) and **demo faults** (Inject / Stop for
+  all five live faults, plus copyable make and Docker commands).
 
 ## Run
 

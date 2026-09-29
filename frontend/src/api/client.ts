@@ -74,6 +74,43 @@ export function acknowledgeAlert(id: string): Promise<Alert> {
   return request<Alert>(`/api/alerts/${encodeURIComponent(id)}/ack`, { method: 'POST' });
 }
 
+/** Re-queue alerts whose SNS publish failed or is still pending. */
+export function retryDelivery(): Promise<{ queued: number }> {
+  return request<{ queued: number }>('/api/delivery/retry', { method: 'POST' });
+}
+
+export interface InjectedFault {
+  name: string;
+  until: string;
+  mode: 'lines' | 'suppress';
+}
+
+/** Inject a demo fault into the live log / generator. */
+export function injectFault(name: string, duration: number): Promise<InjectedFault> {
+  return request<InjectedFault>('/api/faults', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, duration }),
+  });
+}
+
+export interface StoppedFaults {
+  stopped: string | string[];
+  faults: InjectedFault[];
+}
+
+/** Stop one demo fault. */
+export function stopFault(name: string): Promise<StoppedFaults> {
+  return request<StoppedFaults>(`/api/faults/${encodeURIComponent(name)}`, {
+    method: 'DELETE',
+  });
+}
+
+/** Stop every active demo fault. */
+export function stopAllFaults(): Promise<StoppedFaults> {
+  return request<StoppedFaults>('/api/faults', { method: 'DELETE' });
+}
+
 /** WebSocket endpoint on the same origin as the page (proxied like /api). */
 export function alertStreamUrl(location: Location = window.location): string {
   const override: string | undefined = import.meta.env.VITE_WS_URL;

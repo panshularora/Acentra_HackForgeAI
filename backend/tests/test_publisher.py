@@ -36,7 +36,15 @@ def aws() -> Iterator[None]:
 
 
 def settings(**overrides: Any) -> Settings:
-    values: dict[str, Any] = {"aws_endpoint_url": None, "aws_region": "us-east-1", **overrides}
+    values: dict[str, Any] = {
+        "aws_endpoint_url": None,
+        "aws_region": "us-east-1",
+        # Do not inherit the repo .env (real SNS topic, CW off).
+        "sns_topic_arn": None,
+        "sns_topic_name": "claimswatch-alerts",
+        "cw_enabled": True,
+        **overrides,
+    }
     return Settings(**values)
 
 
@@ -173,6 +181,12 @@ def test_subject_has_no_line_breaks_control_or_non_ascii_characters() -> None:
     alert = make_alert(summary="DB timeout\nin\tclaims\x07 \u2014 retry\r\n")
 
     assert sns_subject(alert, "ClaimsWatch") == "[CRITICAL] ClaimsWatch: DB timeout in claims retry"
+
+
+def test_configured_topic_arn_is_ready_before_ensure_resources() -> None:
+    arn = "arn:aws:sns:ap-south-1:109613847475:log-anomaly-alerts"
+    publisher = AlertPublisher(settings(sns_topic_arn=arn))
+    assert publisher.topic_arn == arn
 
 
 def test_existing_topic_arn_is_used_without_creating_a_topic(aws: None) -> None:

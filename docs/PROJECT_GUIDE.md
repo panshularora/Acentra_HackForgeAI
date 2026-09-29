@@ -638,7 +638,7 @@ A benchmark comparing the global detector with the per-template detector is in d
 
 ### Known limitations
 
-* Only one detector (`error_spike`) exists on `main`. The `heartbeat-stop` and `flow-break` faults in `loggen.py` are not detected (section 10). The frontend already has labels for `silence`, `new_pattern` and `flow_break`, but the backend never sends them.
+* Four detectors run on `main`: `error_spike`, `silence`, `new_pattern`, and `flow_break`. Dashboard Demo faults can inject and stop all five loggen faults.
 * A per-template baseline learns only when no incident is open. A long incident freezes learning for all templates.
 * A template first seen during warm-up waits for its own samples before it can be scored (`test_baseline.py::test_new_key_during_warm_up_waits_for_its_own_samples`).
 * The parser expects one format (`timestamp LEVEL service key=value ...`); other formats count as malformed.

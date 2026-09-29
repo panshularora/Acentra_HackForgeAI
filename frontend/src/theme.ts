@@ -1,58 +1,55 @@
 import type { Severity } from './types';
 
 /**
- * Single source of truth for the visual system. Values here are pushed into
- * CSS custom properties at startup (see applyThemeVariables), so styles.css
- * never hard-codes a colour, font or spacing value.
+ * Visual system for the on-call console. Tokens land as CSS custom properties
+ * (applyThemeVariables); styles.css never hard-codes a colour or font.
  *
- * Colour is reserved for severity. Everything else is a neutral charcoal
- * scale, with one exception: the small "connected" dot in the status bar.
+ * Colour is reserved for severity, the live-connection dot, and a 2px incident
+ * rail. Everything else is ink, paper, and a quiet teal for "healthy".
  */
 
 export const APP_NAME = 'ClaimsWatch';
 
 export const COLOR = {
-  bg: '#0e1115',
-  surface: '#14181d',
+  bg: '#0a1016',
+  surface: '#101820',
   /** Raised surfaces inside a panel (cards, code blocks). */
-  raised: '#191e24',
-  border: '#232930',
+  raised: '#161f29',
+  border: '#1e2a36',
   /** Hover/focus outlines and dividers that need a touch more contrast. */
-  borderStrong: '#333a44',
-  text: '#e6e8eb',
-  textMuted: '#8e97a1',
+  borderStrong: '#2c3c4c',
+  text: '#e6ebe4',
+  textMuted: '#8a958c',
   /** Chart-only neutrals. The "normal" band is textMuted at 15% opacity. */
-  band: 'rgba(138, 146, 156, 0.15)',
-  bandEdge: 'rgba(138, 146, 156, 0.45)',
-  grid: '#1d2228',
-  line: '#e6e8eb',
+  band: 'rgba(138, 149, 140, 0.16)',
+  bandEdge: 'rgba(138, 149, 140, 0.42)',
+  grid: '#18222c',
+  line: '#e6ebe4',
   /** Used only for the live-connection dot. */
-  ok: '#2fb344',
+  ok: '#3c9d74',
 } as const;
 
 /**
  * The 3D detector view. Neutral like the rest of the page: the core is silver
- * when calm and only takes a severity colour while an incident is open. Log
- * lines are pale dots; error lines are a muted red so the error share is
- * visible at a glance without competing with the severity colours.
+ * when calm and only takes a severity colour while an incident is open.
  */
 export const SCENE_COLOR = {
-  core: '#b9c3ce',
-  coreDim: '#4a525c',
-  line: '#c7cfd8',
-  error: '#e5676a',
-  ring: '#5f6975',
-  rate: '#e6e8eb',
+  core: '#c5d0c8',
+  coreDim: '#3d4a52',
+  line: '#c5d0c8',
+  error: '#d46568',
+  ring: '#5c6b72',
+  rate: '#e6ebe4',
 } as const;
 
 export const SEVERITY_COLOR: Record<Severity, string> = {
-  WARNING: '#e0a100',
-  HIGH: '#e8590c',
-  CRITICAL: '#e03131',
+  WARNING: '#d4a017',
+  HIGH: '#d65a31',
+  CRITICAL: '#d13b3b',
 };
 
 export const FONT = {
-  ui: "'Inter Variable', Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif",
+  ui: "'Public Sans Variable', 'Public Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif",
   mono: "'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace",
 } as const;
 
@@ -69,15 +66,21 @@ export const SPACE = {
 } as const;
 
 /** One radius everywhere keeps panels, chips and buttons visually related. */
-export const RADIUS = '6px';
+export const RADIUS = '4px';
 
 export const FONT_SIZE = {
   xs: '11px',
   sm: '12px',
   md: '13px',
   lg: '15px',
-  xl: '20px',
-  xxl: '26px',
+  xl: '22px',
+  xxl: '32px',
+} as const;
+
+export const MOTION = {
+  ease: 'cubic-bezier(0.16, 1, 0.3, 1)',
+  duration: '180ms',
+  enter: '220ms',
 } as const;
 
 /** Flattens the tokens above into `--token-name` CSS custom properties. */
@@ -86,6 +89,7 @@ export function themeVariables(): Record<string, string> {
   const kebab = (s: string) => s.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
 
   for (const [key, value] of Object.entries(COLOR)) vars[`--color-${kebab(key)}`] = value;
+  for (const [key, value] of Object.entries(SCENE_COLOR)) vars[`--scene-${kebab(key)}`] = value;
   for (const [key, value] of Object.entries(SEVERITY_COLOR)) {
     vars[`--severity-${key.toLowerCase()}`] = value;
   }
@@ -93,6 +97,9 @@ export function themeVariables(): Record<string, string> {
   for (const [key, value] of Object.entries(SPACE)) vars[`--space-${key}`] = value;
   vars['--radius'] = RADIUS;
   for (const [key, value] of Object.entries(FONT_SIZE)) vars[`--text-${key}`] = value;
+  vars['--ease'] = MOTION.ease;
+  vars['--duration'] = MOTION.duration;
+  vars['--duration-enter'] = MOTION.enter;
   return vars;
 }
 

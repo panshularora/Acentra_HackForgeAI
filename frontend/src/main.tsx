@@ -1,4 +1,4 @@
-import '@fontsource-variable/inter';
+import '@fontsource-variable/public-sans';
 import '@fontsource-variable/jetbrains-mono';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';

@@ -25,12 +25,15 @@ from datetime import datetime
 from app.detection.baseline import RobustBaseline
 from app.detection.config import DetectorConfig
 from app.detection.error_spike import ErrorSpikeDetector
+from app.detection.flow_break import FlowBreakDetector
 from app.detection.incidents import (
     AlertChange,
     AlertEvent,
     IncidentTracker,
     WindowContext,
 )
+from app.detection.new_pattern import NewPatternDetector
+from app.detection.silence import SilenceDetector
 from app.detection.templates import TemplateCatalog
 from app.detection.window import BucketAccumulator, SlidingWindow
 from app.models import Alert, DetectorName, LearningState, LogEvent, StatsPoint
@@ -45,7 +48,7 @@ __all__ = [
 ]
 
 # Detectors this build runs, in the order their findings are applied.
-DETECTORS: tuple[DetectorName, ...] = ("error_spike",)
+DETECTORS: tuple[DetectorName, ...] = ("error_spike", "silence", "new_pattern", "flow_break")
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,6 +83,9 @@ class Detector:
             mad_floor=self.config.mad_floor,
         )
         self._error_spike = ErrorSpikeDetector(self.config)
+        self._silence = SilenceDetector(self.config)
+        self._new_pattern = NewPatternDetector(self.config)
+        self._flow_break = FlowBreakDetector(self.config)
         self._incidents = IncidentTracker(self.config.resolve_after_buckets, id_factory)
 
     @property
@@ -105,18 +111,38 @@ class Detector:
     def observe(self, event: LogEvent) -> None:
         """Match an event to its template and count it in the currently open bucket."""
         match = self._catalog.match(event.raw)
-        self._accumulator.add(replace(event, template_id=match.id, params=match.params))
+        tagged = replace(event, template_id=match.id, params=match.params)
+        self._accumulator.add(tagged)
+        self._silence.observe(tagged)
+        self._new_pattern.observe(tagged)
+        self._flow_break.observe(tagged)
 
     def close_bucket(self, end: datetime) -> DetectionResult:
         """Close the open bucket at ``end``, run the detectors and advance incidents."""
         self._window.push(self._accumulator.close(end))
-        # A window with no lines has no error rate (not 0%): nothing is scored,
-        # nothing is learned, and the chart shows a gap.
+        # A window with no lines has no error rate (not 0%): error_spike is
+        # skipped, but silence and flow-break still run so a stopped feed is
+        # visible. The chart shows a gap.
         empty = self._window.total == 0
         rate = self._window.error_rate
         history = self._rate_baseline.sample_count
+        if self.baseline_warm:
+            self._new_pattern.mark_ready()
 
-        findings = [] if empty else self._error_spike.evaluate(self._window, self._catalog, history)
+        findings = []
+        if not empty:
+            findings.extend(self._error_spike.evaluate(self._window, self._catalog, history))
+        claimed = {
+            finding.explanation.template.id
+            for finding in findings
+            if finding.explanation.template is not None
+        }
+        self._new_pattern.close_bucket()
+        if not empty:
+            findings.extend(self._new_pattern.evaluate(self._catalog, claimed))
+        findings.extend(self._silence.evaluate(end, self._catalog))
+        findings.extend(self._flow_break.evaluate(end))
+
         severity = max((f.severity for f in findings), key=lambda s: s.rank, default=None)
         context = WindowContext(error_rate=rate, baseline_median=self._rate_baseline.median or 0.0)
         events = self._incidents.advance(end, findings, context)
@@ -137,4 +163,5 @@ class Detector:
         if learnable and not events and not self.open_incidents:
             self._rate_baseline.update(rate)
             self._error_spike.learn(self._window)
+            self._flow_break.learn()
         return DetectionResult(stats=stats, alert_events=tuple(events))

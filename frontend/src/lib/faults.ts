@@ -8,11 +8,7 @@ export interface Fault {
   duration: number;
 }
 
-/**
- * The faults the live detector (error_spike) catches. The log generator can
- * also inject heartbeat-stop and flow-break, but no detector watches for
- * those yet, so they are listed separately and never offered as a demo.
- */
+/** Demo faults the live detectors catch. Inject from the dashboard. */
 export const DEMO_FAULTS: readonly Fault[] = [
   {
     name: 'db-outage',
@@ -35,9 +31,21 @@ export const DEMO_FAULTS: readonly Fault[] = [
     make: 'make incident-new',
     duration: 45,
   },
+  {
+    name: 'heartbeat-stop',
+    title: 'Heartbeat stop',
+    effect: 'eligibility-sync stops sending heartbeats (needs loggen running)',
+    make: 'make incident-silence',
+    duration: 60,
+  },
+  {
+    name: 'flow-break',
+    title: 'Claim flow break',
+    effect: 'validated claims stop being adjudicated (needs loggen running)',
+    make: 'make incident-flow',
+    duration: 60,
+  },
 ];
-
-export const UNDETECTED_FAULTS = ['heartbeat-stop', 'flow-break'] as const;
 
 export function faultCommand(fault: Fault, runner: Runner): string {
   return runner === 'make'

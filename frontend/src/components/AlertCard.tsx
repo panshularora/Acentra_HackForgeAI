@@ -28,11 +28,13 @@ function ContributorGroup({
   items,
   mono = false,
   wrap = false,
+  onSelect,
 }: {
   label: string;
   items: Contributor[];
   mono?: boolean;
   wrap?: boolean;
+  onSelect?: (value: string) => void;
 }) {
   if (items.length === 0) return null;
   return (
@@ -41,14 +43,32 @@ function ContributorGroup({
       <ul className="contributors__list">
         {items.slice(0, MAX_CONTRIBUTORS).map((item) => (
           <li key={item.value} className="contributor">
-            <span
-              className={['contributor__value', mono && 'mono', wrap && 'contributor__value--wrap']
-                .filter(Boolean)
-                .join(' ')}
-              title={item.value}
-            >
-              <MaskedText text={item.value} />
-            </span>
+            {onSelect ? (
+              <button
+                type="button"
+                className={[
+                  'contributor__value',
+                  'contributor__value--button',
+                  mono && 'mono',
+                  wrap && 'contributor__value--wrap',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                title={`Filter feed to ${item.value}`}
+                onClick={() => onSelect(item.value)}
+              >
+                <MaskedText text={item.value} />
+              </button>
+            ) : (
+              <span
+                className={['contributor__value', mono && 'mono', wrap && 'contributor__value--wrap']
+                  .filter(Boolean)
+                  .join(' ')}
+                title={item.value}
+              >
+                <MaskedText text={item.value} />
+              </span>
+            )}
             <span className="contributor__share mono">{formatPercent(item.share, 0)}</span>
             <span className="contributor__bar" aria-hidden="true">
               <span style={{ width: `${Math.min(100, Math.max(0, item.share * 100))}%` }} />
@@ -67,12 +87,18 @@ function ContributorGroup({
  * omitted for older backends.
  */
 function AlertExplanation({ alert }: { alert: Alert }) {
-  const { template, baseline_band: band, observed } = alert;
+  const { template, baseline_band: band, observed, suspected_origin: origin } = alert;
   const params = (alert.params ?? []).slice(0, MAX_PARAMS);
-  if (!template && !band && params.length === 0) return null;
+  if (!template && !band && params.length === 0 && !origin) return null;
 
   return (
     <dl className="alert-card__explain">
+      {origin && origin !== template?.service && (
+        <div>
+          <dt>Origin</dt>
+          <dd>{origin}</dd>
+        </div>
+      )}
       {template && (
         <div>
           <dt>Template</dt>
@@ -153,9 +179,17 @@ interface AlertCardProps {
   /** Plays the one-off arrival animation (slide in + single pulse). */
   isNew?: boolean;
   onAcknowledge?: (id: string) => Promise<void>;
+  /** Clicking a service name in the card applies that service as a feed filter. */
+  onSelectService?: (service: string) => void;
 }
 
-export function AlertCard({ alert, now, isNew = false, onAcknowledge }: AlertCardProps) {
+export function AlertCard({
+  alert,
+  now,
+  isNew = false,
+  onAcknowledge,
+  onSelectService,
+}: AlertCardProps) {
   const headingId = useId();
   const [ackState, setAckState] = useState<AckState>('idle');
 
@@ -251,7 +285,7 @@ export function AlertCard({ alert, now, isNew = false, onAcknowledge }: AlertCar
         <AlertExplanation alert={alert} />
         <div className="contributors">
           <p className="contributors__caption">Share of all errors in the window</p>
-          <ContributorGroup label="Service" items={services} />
+          <ContributorGroup label="Service" items={services} onSelect={onSelectService} />
           <ContributorGroup label="Error message" items={messages} mono wrap />
           <ContributorGroup label="Source IP" items={sourceIps} mono />
         </div>

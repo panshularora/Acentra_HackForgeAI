@@ -81,6 +81,15 @@ afterEach(() => {
 const fetchedPaths = () => fetchMock.mock.calls.map(([input]) => String(input));
 
 describe('useAlertStream', () => {
+  it('loads REST history before the socket is open', async () => {
+    backend.stats = makeStatsSeries(2, '2026-09-28T13:05:00Z');
+    backend.alerts = [makeAlert({ id: 'rest' })];
+    const { result } = renderHook(() => useAlertStream('ws://test/ws'));
+    await waitFor(() => expect(result.current.alerts.map((a) => a.id)).toEqual(['rest']));
+    expect(result.current.connection).toBe('connecting');
+    expect(result.current.stats).toHaveLength(2);
+  });
+
   it('connects, backfills history on open, then applies live messages', async () => {
     backend.stats = makeStatsSeries(3, '2026-09-28T13:05:00Z');
     backend.alerts = [makeAlert({ id: 'history' })];
@@ -89,10 +98,11 @@ describe('useAlertStream', () => {
     expect(result.current.connection).toBe('connecting');
     expect(MockWebSocket.latest().url).toBe('ws://test/ws');
 
+    await waitFor(() => expect(result.current.stats).toHaveLength(3));
+    expect(result.current.connection).toBe('connecting');
+
     act(() => MockWebSocket.latest().open());
     expect(result.current.connection).toBe('live');
-
-    await waitFor(() => expect(result.current.stats).toHaveLength(3));
     expect(result.current.alerts.map((a) => a.id)).toEqual(['history']);
     expect(result.current.health?.log_path).toBe('logs/app.log');
     expect(fetchedPaths()).toEqual(
@@ -120,8 +130,8 @@ describe('useAlertStream', () => {
   it('reconnects with backoff after a drop and backfills what it missed', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const { result } = renderHook(() => useAlertStream('ws://test/ws'));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     act(() => MockWebSocket.latest().open());
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
 
     // While the socket is down, the backend keeps detecting.
     backend.stats = makeStatsSeries(2, '2026-09-28T13:06:00Z');
@@ -191,15 +201,15 @@ describe('useAlertStream', () => {
       ingest_error: 'PermissionError: logs/app.log',
     });
 
-    // Once the socket drops, polling stops until the next connect.
+    // Health keeps polling while the socket is down, so ingest degradation
+    // is still visible during reconnect.
     act(() => MockWebSocket.latest().drop());
     const healthCalls = () => fetchedPaths().filter((p) => p === '/api/health').length;
     const before = healthCalls();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(HEALTH_POLL_MS * 2);
     });
-    // Only reconnect attempts happen (no open), so no further health reads.
-    expect(healthCalls()).toBe(before);
+    expect(healthCalls()).toBeGreaterThan(before);
   });
 
   it('stops reconnecting once unmounted', async () => {

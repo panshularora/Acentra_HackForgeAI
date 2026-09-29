@@ -25,6 +25,10 @@ TEST_SETTINGS = {
     "min_total": 10,
     "tail_poll_seconds": 0.02,
     "aws_enabled": False,
+    "aws_region": "us-east-1",
+    "sns_topic_arn": None,
+    "sns_topic_name": "claimswatch-alerts",
+    "cw_enabled": True,
     "stats_history_minutes": 24 * 60,
 }
 
@@ -101,7 +105,7 @@ def test_health_reports_pipeline_state(client: TestClient, log_path: Path) -> No
         "window_seconds": 3 * 3600,
         "bucket_seconds": 3600,
         "baseline_min_buckets": 3,
-        "detectors": ["error_spike"],
+        "detectors": ["error_spike", "silence", "new_pattern", "flow_break"],
     }
     assert body["learning"] == {
         "state": "learning",
@@ -115,6 +119,62 @@ def test_health_reports_pipeline_state(client: TestClient, log_path: Path) -> No
         "baseline_warm": False,
         "websocket_clients": 0,
     }
+    assert body["faults"] == []
+
+
+def test_inject_silence_fault_writes_the_generator_control_file(
+    client: TestClient, log_path: Path
+) -> None:
+    response = client.post("/api/faults", json={"name": "heartbeat-stop", "duration": 12})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["name"] == "heartbeat-stop"
+    assert body["mode"] == "suppress"
+    control = log_path.with_name(log_path.name + ".faults.json")
+    assert "heartbeat-stop" in control.read_text(encoding="utf-8")
+    listed = client.get("/api/faults").json()["faults"]
+    assert listed[0]["name"] == "heartbeat-stop"
+
+
+def test_inject_unknown_fault_is_rejected(client: TestClient) -> None:
+    response = client.post("/api/faults", json={"name": "not-a-fault"})
+    assert response.status_code == 400
+
+
+def test_stop_fault_clears_the_generator_control_file(
+    client: TestClient, log_path: Path
+) -> None:
+    injected = client.post("/api/faults", json={"name": "heartbeat-stop", "duration": 60})
+    assert injected.status_code == 200
+    control = log_path.with_name(log_path.name + ".faults.json")
+    assert "heartbeat-stop" in control.read_text(encoding="utf-8")
+
+    stopped = client.delete("/api/faults/heartbeat-stop")
+    assert stopped.status_code == 200
+    body = stopped.json()
+    assert body["stopped"] == "heartbeat-stop"
+    assert body["faults"] == []
+    assert "heartbeat-stop" not in control.read_text(encoding="utf-8")
+    assert client.get("/api/faults").json()["faults"] == []
+
+
+def test_stop_all_faults_clears_every_active_fault(client: TestClient) -> None:
+    first = client.post("/api/faults", json={"name": "heartbeat-stop", "duration": 60})
+    second = client.post("/api/faults", json={"name": "flow-break", "duration": 60})
+    assert first.status_code == 200
+    assert second.status_code == 200
+
+    stopped = client.delete("/api/faults")
+    assert stopped.status_code == 200
+    body = stopped.json()
+    assert body["stopped"] == ["flow-break", "heartbeat-stop"]
+    assert body["faults"] == []
+    assert client.get("/api/faults").json()["faults"] == []
+
+
+def test_stop_unknown_fault_is_rejected(client: TestClient) -> None:
+    response = client.delete("/api/faults/not-a-fault")
+    assert response.status_code == 400
 
 
 def test_liveness_probe(client: TestClient) -> None:
@@ -137,7 +197,7 @@ def test_health_fails_while_the_log_cannot_be_read(tmp_path: Path) -> None:
         assert client.get("/health").json() == {"status": "degraded"}
         body = client.get("/api/health").json()
         assert body["status"] == "degraded"
-        assert body["ingest_error"].startswith("IsADirectoryError")
+        assert body["ingest_error"].startswith(("IsADirectoryError", "PermissionError"))
 
 
 def test_incident_left_open_by_a_previous_run_is_resolved_on_startup(
@@ -238,6 +298,12 @@ def test_websocket_ack_is_broadcast(client: TestClient, log_path: Path) -> None:
         message = ws.receive_json()
 
     assert message == {"type": "alert", "data": client.get("/api/alerts").json()["alerts"][0]}
+
+
+def test_retry_delivery_with_aws_off_queues_nothing(client: TestClient) -> None:
+    response = client.post("/api/delivery/retry")
+    assert response.status_code == 200
+    assert response.json() == {"queued": 0}
 
 
 def test_disconnected_client_is_removed(client: TestClient) -> None:

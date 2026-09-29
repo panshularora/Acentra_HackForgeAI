@@ -24,6 +24,14 @@ class DetectorConfig:
     template_similarity: float = 0.5
     sample_line_limit: int = 5
     contributor_limit: int = 3
+    silence_factor: float = 3.0
+    silence_min_seconds: float = 20.0
+    silence_max_cv: float = 0.25
+    silence_min_gaps: int = 6
+    silence_gap_history: int = 30
+    new_pattern_min_count: int = 2
+    flow_timeout_seconds: float = 5.0
+    flow_map_cap: int = 10_000
 
     @property
     def window_seconds(self) -> int:
@@ -50,4 +58,11 @@ class DetectorConfig:
             ),
             max_templates=settings.max_templates,
             template_similarity=settings.template_similarity,
+            silence_factor=settings.silence_factor,
+            silence_min_seconds=settings.silence_min_seconds,
+            silence_max_cv=settings.silence_max_cv,
+            silence_min_gaps=settings.silence_min_gaps,
+            new_pattern_min_count=settings.new_pattern_min_count,
+            flow_timeout_seconds=settings.flow_timeout_seconds,
+            flow_map_cap=settings.flow_map_cap,
         )

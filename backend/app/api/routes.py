@@ -5,6 +5,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, WebSocket
 from starlette.websockets import WebSocketDisconnect
 
+from app.demo.injector import FAULTS
 from app.detection.detector import DETECTORS
 from app.services import Services
 
@@ -67,6 +68,7 @@ def health(services: ServicesDep) -> dict[str, Any]:
             "baseline_warm": services.detector.baseline_warm,
             "websocket_clients": services.clients.client_count,
         },
+        "faults": [fault.to_dict() for fault in services.injector.active()],
     }
 
 
@@ -84,6 +86,59 @@ def alerts(
 ) -> dict[str, Any]:
     """Most recent alerts, newest first."""
     return {"alerts": [a.to_dict() for a in services.store.list_recent(limit)]}
+
+
+@router.post("/api/delivery/retry")
+async def retry_delivery(services: ServicesDep) -> dict[str, Any]:
+    """Re-queue alerts whose SNS publish failed or is still pending."""
+    queued = await services.pipeline.retry_undelivered_sns()
+    return {"queued": queued}
+
+
+@router.get("/api/faults")
+def list_faults(services: ServicesDep) -> dict[str, Any]:
+    """Currently active demo faults."""
+    return {"faults": [fault.to_dict() for fault in services.injector.active()]}
+
+
+@router.post("/api/faults")
+async def inject_fault(payload: dict[str, Any], services: ServicesDep) -> dict[str, Any]:
+    """Inject a demo fault into the live log / generator control file."""
+    name = str(payload.get("name", ""))
+    if name not in FAULTS:
+        raise HTTPException(status_code=400, detail=f"unknown fault: {name}")
+    duration = payload.get("duration")
+    try:
+        seconds = None if duration is None else float(duration)
+        fault = await services.injector.inject(name, seconds)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return fault.to_dict()
+
+
+@router.delete("/api/faults")
+def stop_all_faults(services: ServicesDep) -> dict[str, Any]:
+    """Stop every active demo fault."""
+    stopped = services.injector.stop_all()
+    return {
+        "stopped": stopped,
+        "faults": [fault.to_dict() for fault in services.injector.active()],
+    }
+
+
+@router.delete("/api/faults/{name}")
+def stop_fault(name: str, services: ServicesDep) -> dict[str, Any]:
+    """Stop one demo fault. Idempotent for a known name that is already idle."""
+    if name not in FAULTS:
+        raise HTTPException(status_code=400, detail=f"unknown fault: {name}")
+    try:
+        services.injector.stop(name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {
+        "stopped": name,
+        "faults": [fault.to_dict() for fault in services.injector.active()],
+    }
 
 
 @router.post("/api/alerts/{alert_id}/ack")

@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
-import { makeStatsPoint } from '../test/fixtures';
+import userEvent from '@testing-library/user-event';
+import { makeAlert, makeStatsPoint } from '../test/fixtures';
 import { SummaryStrip } from './SummaryStrip';
 
 describe('SummaryStrip', () => {
@@ -22,5 +23,24 @@ describe('SummaryStrip', () => {
     render(<SummaryStrip latest={makeStatsPoint()} alerts={[]} now={0} windowSeconds={120} />);
 
     expect(screen.getByText('Log lines (120s)')).toBeInTheDocument();
+  });
+
+  it('lets the open-incident count drive the feed filter', async () => {
+    const user = userEvent.setup();
+    const onFilterOpen = vi.fn();
+    const onFilterSeverity = vi.fn();
+    render(
+      <SummaryStrip
+        latest={makeStatsPoint()}
+        alerts={[makeAlert()]}
+        now={Date.parse('2026-09-28T13:10:00Z')}
+        onFilterOpen={onFilterOpen}
+        onFilterSeverity={onFilterSeverity}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: 'Show open incidents (1)' }));
+    expect(onFilterOpen).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole('button', { name: 'Show Critical (1)' }));
+    expect(onFilterSeverity).toHaveBeenCalledWith('CRITICAL');
   });
 });
