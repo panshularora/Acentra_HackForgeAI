@@ -107,6 +107,12 @@ class Settings(BaseSettings):
     # Browser origins allowed to call the API directly (the Vite dev proxy
     # makes this unnecessary in development, but it helps other setups).
     cors_origins: list[str] = ["http://localhost:5173"]
+    cors_origin_regex: str | None = None
+
+    # Production image: serve frontend/dist from this process and write demo
+    # traffic into log_path so a single container is a full live demo.
+    serve_dashboard: bool = False
+    demo_loggen: bool = False
 
     @property
     def buckets_per_window(self) -> int:

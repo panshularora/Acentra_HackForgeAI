@@ -177,6 +177,28 @@ def test_stop_unknown_fault_is_rejected(client: TestClient) -> None:
     assert response.status_code == 400
 
 
+def test_dashboard_index_is_served_when_enabled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dist = tmp_path / "frontend" / "dist" / "assets"
+    dist.mkdir(parents=True)
+    index = tmp_path / "frontend" / "dist" / "index.html"
+    index.write_text("<!doctype html><title>ClaimsWatch</title>", encoding="utf-8")
+    monkeypatch.setattr("app.main._REPO_ROOT", tmp_path)
+    log_path = tmp_path / "app.log"
+    log_path.write_text("ok\n", encoding="utf-8")
+    settings = Settings(
+        log_path=log_path,
+        db_path=tmp_path / "test.db",
+        serve_dashboard=True,
+        **TEST_SETTINGS,
+    )
+    with TestClient(create_app(settings)) as client:
+        response = client.get("/")
+    assert response.status_code == 200
+    assert b"ClaimsWatch" in response.content
+
+
 def test_liveness_probe(client: TestClient) -> None:
     response = client.get("/health")
 

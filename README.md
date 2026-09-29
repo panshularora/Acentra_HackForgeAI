@@ -2,7 +2,9 @@
 
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-Vercel-black?logo=vercel)](https://frontend-nine-rouge-53.vercel.app)
 
-> 🚀 **[Live Dashboard → https://frontend-nine-rouge-53.vercel.app](https://frontend-nine-rouge-53.vercel.app)**
+> **[Live dashboard → https://frontend-nine-rouge-53.vercel.app](https://frontend-nine-rouge-53.vercel.app)**
+>
+> Same-origin full stack (dashboard + API + live log generator + SNS): [https://clearance-attract-animated-associate.trycloudflare.com](https://clearance-attract-animated-associate.trycloudflare.com)
 
 When a Medicaid eligibility service starts failing, the on-call engineer learns within seconds what is failing and where, before members are turned away at the pharmacy.
 
@@ -129,6 +131,17 @@ cd frontend && npm install && npm run dev            # terminal 4: dashboard on 
 ```
 
 Then `make incident-db`, `make incident-auth`, `make sns-tail` and `make feed` (the WebSocket feed in a terminal).
+
+### Production image
+
+One container serves the dashboard, the API, WebSockets, and the demo log generator. The browser talks to a single origin.
+
+```bash
+docker compose -f docker-compose.prod.yml up --build
+# http://localhost:8080
+```
+
+Pass real AWS settings through `.env` (never commit it). `SERVE_DASHBOARD` and `DEMO_LOGGEN` are on in this image. Inject and Stop work from the Demo faults panel.
 
 ### Log generator and faults
 

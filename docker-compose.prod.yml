@@ -1,0 +1,36 @@
+# Public one-container demo (dashboard + API + log generator).
+# Uses the real AWS settings in .env. Do not bind this to a shared network
+# unless you intend the demo to be reachable.
+#
+#   docker compose -f docker-compose.prod.yml up --build
+
+name: claimswatch-prod
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: claimswatch
+    env_file: .env
+    environment:
+      SERVE_DASHBOARD: "true"
+      DEMO_LOGGEN: "true"
+      AWS_ENDPOINT_URL: ""
+      CW_ENABLED: "false"
+      PORT: "8000"
+      CORS_ORIGIN_REGEX: "https://.*\\.vercel\\.app"
+    ports:
+      - "${HOST_PORT:-8080}:8000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 8
+      start_period: 20s
